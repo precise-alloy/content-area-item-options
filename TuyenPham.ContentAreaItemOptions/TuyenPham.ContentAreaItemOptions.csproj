@@ -1,0 +1,72 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+
+    <!-- NuGet package metadata -->
+    <PackageId>TuyenPham.ContentAreaItemOptions</PackageId>
+    <Version>1.0.0</Version>
+    <Title>Content Area Item Options</Title>
+    <Authors>Tuyen Pham</Authors>
+    <Description>Plugin to add options to content area items in Optimizely.</Description>
+    <PackageProjectUrl>https://github.com/precise-alloy/content-area-item-options</PackageProjectUrl>
+    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <PackageTags>Optimizely Content Area Item Options</PackageTags>
+    <Copyright>Copyright 2026</Copyright>
+
+    <!-- Prevent ClientResources from being included as compiled content -->
+    <EnableDefaultContentItems>false</EnableDefaultContentItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="EPiServer.CMS.UI.Core" Version="12.32.3" />
+  </ItemGroup>
+
+  <!-- Zip ClientResources + module.config before packing -->
+  <PropertyGroup>
+    <ModuleName>TuyenPham.ContentAreaItemOptions</ModuleName>
+    <ModuleZipPath>$(IntermediateOutputPath)$(ModuleName).zip</ModuleZipPath>
+  </PropertyGroup>
+
+  <Target Name="CreateModuleZip" BeforeTargets="GenerateNuspec" DependsOnTargets="Build">
+    <MakeDir Directories="$(IntermediateOutputPath)_module" />
+    <ItemGroup>
+      <ModuleFiles Include="ClientResources\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="module.config"
+          DestinationFolder="$(IntermediateOutputPath)_module" />
+    <Copy SourceFiles="@(ModuleFiles)"
+          DestinationFiles="@(ModuleFiles->'$(IntermediateOutputPath)_module\%(Identity)')" />
+    <ZipDirectory SourceDirectory="$(IntermediateOutputPath)_module"
+                  DestinationFile="$(ModuleZipPath)"
+                  Overwrite="true" />
+    <RemoveDir Directories="$(IntermediateOutputPath)_module" />
+  </Target>
+
+  <!-- Include zip as contentFiles in NuGet package -->
+  <ItemGroup>
+    <None Include="$(ModuleZipPath)"
+          Pack="true"
+          PackagePath="contentFiles\any\any\modules\_protected\$(ModuleName)"
+          Visible="false" />
+    <None Include="LICENSE.txt" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!-- Include .targets file for consuming projects -->
+  <ItemGroup>
+    <None Include="TuyenPham.ContentAreaItemOptions.targets"
+          Pack="true"
+          PackagePath="build\net8.0\"
+          Visible="false" />
+    <None Include="TuyenPham.ContentAreaItemOptions.targets"
+          Pack="true"
+          PackagePath="buildTransitive\net8.0\"
+          Visible="false" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <ContentTargetFolders>contentFiles</ContentTargetFolders>
+  </PropertyGroup>
+
+</Project>
