@@ -6,7 +6,7 @@
 
     <!-- NuGet package metadata -->
     <PackageId>TuyenPham.ContentAreaItemOptions</PackageId>
-    <Version>2.0.0</Version>
+    <Version>2.1.0</Version>
     <Title>Content Area Item Options</Title>
     <Authors>Tuyen Pham</Authors>
     <Description>Plugin to add options to content area items in Optimizely.</Description>
@@ -40,8 +40,9 @@
     </ItemGroup>
     <Copy SourceFiles="module.config"
           DestinationFolder="$(IntermediateOutputPath)_module" />
+    <Exec Command="powershell -Command &quot;(Get-Content '$(IntermediateOutputPath)_module\module.config') -creplace 'ClientResources', '$(Version)/ClientResources' | Set-Content '$(IntermediateOutputPath)_module\module.config'&quot;" />
     <Copy SourceFiles="@(ModuleFiles)"
-          DestinationFiles="@(ModuleFiles->'$(IntermediateOutputPath)_module\%(Identity)')" />
+          DestinationFiles="@(ModuleFiles->'$(IntermediateOutputPath)_module\$(Version)\%(Identity)')" />
     <ZipDirectory SourceDirectory="$(IntermediateOutputPath)_module"
                   DestinationFile="$(ModuleZipPath)"
                   Overwrite="true" />
