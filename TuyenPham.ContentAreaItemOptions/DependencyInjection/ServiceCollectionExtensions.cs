@@ -24,6 +24,19 @@ public static class ServiceCollectionExtensions
         this IServiceCollection services,
         ContentAreaItemOptionsRegistry optionsRegistry)
     {
+        var invalidSelectors = optionsRegistry
+            .Where(s => !s.AttributeName.StartsWith("data-", StringComparison.OrdinalIgnoreCase))
+            .Select(s => s.AttributeName)
+            .ToList();
+
+        if (invalidSelectors.Count > 0)
+        {
+            throw new ArgumentException(
+                $"All ContentAreaItemOptions.AttributeName values must start with 'data-'. " +
+                $"Invalid attribute names: {string.Join(", ", invalidSelectors.Select(n => $"'{n}'"))}.",
+                nameof(optionsRegistry));
+        }
+
         services.Configure<ProtectedModuleOptions>(o =>
         {
             const string moduleName = "TuyenPham.ContentAreaItemOptions";

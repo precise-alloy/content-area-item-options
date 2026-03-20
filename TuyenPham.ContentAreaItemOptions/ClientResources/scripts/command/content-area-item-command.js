@@ -1,17 +1,34 @@
-﻿define(['dojo/_base/declare', 'dojo/_base/lang', 'dojo/request/xhr', 'epi-cms/contentediting/command/_ContentAreaCommand', 'epi-cms/contentediting/viewmodel/ContentBlockViewModel', 'tuyen-pham/content-area-item-options/widget/content-area-item-selector'], function (declare, lang, xhr, _ContentAreaCommand, ContentBlockViewModel, ContentAreaItemSelector) {
+﻿define([
+  "dojo/_base/declare",
+  "dojo/_base/lang",
+  "dojo/request/xhr",
+  "epi-cms/contentediting/command/_ContentAreaCommand",
+  "epi-cms/contentediting/viewmodel/ContentBlockViewModel",
+  "tuyen-pham/content-area-item-options/widget/content-area-item-selector",
+], function (
+  declare,
+  lang,
+  xhr,
+  _ContentAreaCommand,
+  ContentBlockViewModel,
+  ContentAreaItemSelector,
+) {
   return declare([_ContentAreaCommand], {
     // Override these in subclass or constructor params
-    label: 'Option: Default',
-    category: 'popup',
-    attributeName: '',
-    apiUrl: '',
-    labelPrefix: 'Option',
-    defaultLabel: 'Default',
-    availability: 'All',
+    label: "Option: Default",
+    category: "popup",
+    attributeName: "",
+    apiUrl: "",
+    labelPrefix: "Option",
+    defaultLabel: "Default",
+    availability: "All",
 
     // Pass preloadedOptions and preloadedRestrictions to skip the API call
     preloadedOptions: null,
     preloadedRestrictions: null,
+
+    // Per-content-area overrides from [ContentAreaItemOptions] on the property
+    contentAreaOverrides: null,
 
     _allOptions: null,
     _restrictions: null,
@@ -31,8 +48,8 @@
         this._refreshAvailability();
       } else if (this.apiUrl) {
         xhr(this.apiUrl, {
-          handleAs: 'json',
-          headers: { Accept: 'application/json' },
+          handleAs: "json",
+          headers: { Accept: "application/json" },
         }).then(
           lang.hitch(this, function (response) {
             this._allOptions = response.options || [];
@@ -42,7 +59,7 @@
           lang.hitch(this, function () {
             this._allOptions = [];
             this._restrictions = {};
-            this.set('isAvailable', false);
+            this.set("isAvailable", false);
           }),
         );
       }
@@ -57,16 +74,37 @@
       var contentTypeId = this.model.contentTypeId;
       if (contentTypeId && this._restrictions.hasOwnProperty(contentTypeId)) {
         var allowed = this._restrictions[contentTypeId];
-        if (!allowed || allowed.length === 0) {
+        if (allowed === null) {
           return [];
+        }
+        if (allowed.length === 0) {
+          return options;
         }
         return options.filter(function (opt) {
           return allowed.indexOf(opt.id) >= 0;
         });
       }
 
+      // Per-content-area override from [ContentAreaItemOptions] or [HideContentAreaItemOptions] on the ContentArea property
+      // null = hidden; empty array = enable with all options; non-empty = filter to those IDs
+      if (
+        this.contentAreaOverrides &&
+        this.contentAreaOverrides.hasOwnProperty(this.attributeName)
+      ) {
+        var caAllowed = this.contentAreaOverrides[this.attributeName];
+        if (caAllowed === null) {
+          return [];
+        }
+        if (!caAllowed || caAllowed.length === 0) {
+          return options;
+        }
+        return options.filter(function (opt) {
+          return caAllowed.indexOf(opt.id) >= 0;
+        });
+      }
+
       // Specific mode: hide for content types without an explicit attribute
-      if (this.availability === 'Specific') {
+      if (this.availability === "Specific") {
         return [];
       }
 
@@ -75,17 +113,20 @@
 
     _refreshAvailability: function () {
       var options = this._getOptionsForModel();
-      var isAvailable = options && options.length > 0 && this.model instanceof ContentBlockViewModel;
+      var isAvailable =
+        options &&
+        options.length > 0 &&
+        this.model instanceof ContentBlockViewModel;
 
-      this.set('isAvailable', isAvailable);
+      this.set("isAvailable", isAvailable);
 
       if (isAvailable) {
-        this.popup.set('model', this.model);
-        this.popup.set('options', options);
+        this.popup.set("model", this.model);
+        this.popup.set("options", options);
 
         var selectedValue = this.model.attributes[this.attributeName];
         if (!selectedValue) {
-          this.set('label', this.labelPrefix + ': ' + this.defaultLabel);
+          this.set("label", this.labelPrefix + ": " + this.defaultLabel);
         } else {
           this._updateLabel(selectedValue);
         }
@@ -101,7 +142,7 @@
 
     _onModelChange: function () {
       if (!this.model) {
-        this.set('isAvailable', false);
+        this.set("isAvailable", false);
         return;
       }
 
@@ -109,7 +150,7 @@
 
       this._refreshAvailability();
 
-      if (!this.get('isAvailable')) {
+      if (!this.get("isAvailable")) {
         return;
       }
 
@@ -117,7 +158,7 @@
         this.attributeName,
         function (prop, oldVal, newVal) {
           if (!newVal) {
-            this.set('label', this.labelPrefix + ': ' + this.defaultLabel);
+            this.set("label", this.labelPrefix + ": " + this.defaultLabel);
           } else {
             this._updateLabel(newVal);
           }
@@ -131,16 +172,21 @@
       if (options) {
         for (var i = 0; i < options.length; i++) {
           if (options[i].id === optionId) {
-            this.set('label', this.labelPrefix + ': ' + options[i].name);
+            this.set("label", this.labelPrefix + ": " + options[i].name);
             return;
           }
         }
       }
-      this.set('label', this.labelPrefix + ': ' + this.defaultLabel);
+      this.set("label", this.labelPrefix + ": " + this.defaultLabel);
     },
 
     _onModelValueChange: function () {
-      this.set('canExecute', !!this.model && (this.model.contentLink || this.model.inlineBlockData) && !this.model.get('readOnly'));
+      this.set(
+        "canExecute",
+        !!this.model &&
+          (this.model.contentLink || this.model.inlineBlockData) &&
+          !this.model.get("readOnly"),
+      );
     },
   });
 });
