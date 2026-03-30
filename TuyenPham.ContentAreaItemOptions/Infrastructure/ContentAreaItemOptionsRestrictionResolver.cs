@@ -84,29 +84,53 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
     /// <param name="selector">The selector that owns the option.</param>
     /// <param name="optionId">The option identifier to check.</param>
     /// <param name="contentTypeId">The content type ID of the block being rendered.</param>
+    /// <param name="propertyOverrides">
+    /// Optional per-property overrides from <see cref="ContentAreaItemOptionsMetadataExtender.BuildOverrides"/>.
+    /// These are checked when no content-type-level restriction exists.
+    /// </param>
     /// <returns><c>true</c> if the option should be applied; <c>false</c> if it has been hidden or restricted.</returns>
-    public bool IsOptionApplicable(Models.ContentAreaItemOptions selector, string optionId, int contentTypeId)
+    public bool IsOptionApplicable(
+        Models.ContentAreaItemOptions selector,
+        string optionId,
+        int contentTypeId,
+        Dictionary<string, string[]?>? propertyOverrides = null)
     {
         var restrictions = GetRestrictions(selector.AttributeName);
 
+        // Content-type-level restrictions take priority
         if (restrictions.TryGetValue(contentTypeId, out var allowedIds))
         {
-            // null = selector is hidden for this content type
-            if (allowedIds is null)
-            {
-                return false;
-            }
-
-            // Non-empty = only these option IDs are allowed
-            if (allowedIds.Length > 0
-                && !allowedIds.Contains(optionId, StringComparer.OrdinalIgnoreCase))
-            {
-                return false;
-            }
+            return IsAllowed(allowedIds, optionId);
         }
-        else if (selector.Availability == ContentAreaItemOptionsAvailability.Specific)
+
+        // Fall back to property-level overrides
+        if (propertyOverrides is not null
+            && propertyOverrides.TryGetValue(selector.AttributeName, out var propertyAllowedIds))
         {
-            // Specific mode: hidden unless content type explicitly opts in
+            return IsAllowed(propertyAllowedIds, optionId);
+        }
+
+        // No explicit restriction — fall back to Availability setting
+        if (selector.Availability == ContentAreaItemOptionsAvailability.Specific)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsAllowed(string[]? allowedIds, string optionId)
+    {
+        // null = selector is hidden
+        if (allowedIds is null)
+        {
+            return false;
+        }
+
+        // Non-empty = only these option IDs are allowed
+        if (allowedIds.Length > 0
+            && !allowedIds.Contains(optionId, StringComparer.OrdinalIgnoreCase))
+        {
             return false;
         }
 
@@ -123,11 +147,18 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
     /// The content type ID of the block being rendered.
     /// When <c>null</c>, restriction checks are skipped and all stored options are returned.
     /// </param>
+    /// <param name="propertyOverrides">
+    /// Optional per-property overrides from <see cref="ContentAreaItemOptionsMetadataExtender.BuildOverrides"/>.
+    /// These are checked when no content-type-level restriction exists.
+    /// Use this when the ContentArea property has <see cref="ContentAreaItemOptionsAttribute"/>
+    /// or <see cref="HideContentAreaItemOptionsAttribute"/> attributes.
+    /// </param>
     /// <returns>A space-separated string of CSS classes from applicable options.</returns>
     public string GetApplicableCssClasses(
         ContentAreaItemOptionsRegistry registry,
         IDictionary<string, object> renderSettings,
-        int? contentTypeId)
+        int? contentTypeId,
+        Dictionary<string, string[]?>? propertyOverrides = null)
     {
         var classes = new List<string>();
 
@@ -141,7 +172,7 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
 
             // Skip options that are no longer applicable for this content type
             if (contentTypeId.HasValue
-                && !IsOptionApplicable(selector, id, contentTypeId.Value))
+                && !IsOptionApplicable(selector, id, contentTypeId.Value, propertyOverrides))
             {
                 continue;
             }

@@ -34,8 +34,11 @@ public sealed class ContentAreaItemOptionsMetadataExtender : EditorDescriptor
     /// <summary>
     /// Builds the per-selector override dictionary from the given attributes.
     /// Returns <c>null</c> when no relevant attributes are present.
+    /// Use this to extract property-level overrides for
+    /// <see cref="ContentAreaItemOptionsRestrictionResolver.GetApplicableCssClasses"/>
+    /// and <see cref="ContentAreaItemOptionsRestrictionResolver.IsOptionApplicable"/>.
     /// </summary>
-    internal static Dictionary<string, string[]?>? BuildOverrides(IEnumerable<Attribute> attributes)
+    public static Dictionary<string, string[]?>? BuildOverrides(IEnumerable<Attribute> attributes)
     {
         var opts = attributes.OfType<ContentAreaItemOptionsAttribute>().ToList();
         var hides = attributes.OfType<HideContentAreaItemOptionsAttribute>().ToList();

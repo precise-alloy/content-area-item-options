@@ -533,4 +533,421 @@ public class ContentAreaItemOptionsRestrictionResolverTests
 
         Assert.Equal("", result);
     }
+
+    // --- IsOptionApplicable with propertyOverrides tests ---
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsTrue_WhenPropertyOverrideEnablesSpecificSelector()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-layout",
+            SelectorName = "layout",
+            LabelPrefix = "Layout",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-layout"] = ["wide", "narrow"],
+        };
+
+        Assert.True(resolver.IsOptionApplicable(selector, "wide", 1, propertyOverrides));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsFalse_WhenPropertyOverrideRestrictsOption()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-layout",
+            SelectorName = "layout",
+            LabelPrefix = "Layout",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-layout"] = ["wide"],
+        };
+
+        Assert.False(resolver.IsOptionApplicable(selector, "narrow", 1, propertyOverrides));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsFalse_WhenPropertyOverrideHidesSelector()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+            Availability = ContentAreaItemOptionsAvailability.All,
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-theme"] = null, // hidden on this property
+        };
+
+        Assert.False(resolver.IsOptionApplicable(selector, "black", 1, propertyOverrides));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsTrue_WhenPropertyOverrideHasEmptyAllowedList()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-layout",
+            SelectorName = "layout",
+            LabelPrefix = "Layout",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+
+        // Empty array = all options enabled
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-layout"] = [],
+        };
+
+        Assert.True(resolver.IsOptionApplicable(selector, "any-option", 1, propertyOverrides));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_ContentTypeRestriction_TakesPriority_OverPropertyOverride()
+    {
+        // Block type hides margin → property override should NOT override that
+        var repo = CreateRepository((10, typeof(BlockWithHiddenMargin)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-margin",
+            SelectorName = "margin",
+            LabelPrefix = "Margin",
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-margin"] = ["top", "bottom"],
+        };
+
+        Assert.False(resolver.IsOptionApplicable(selector, "top", 10, propertyOverrides));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_IgnoresPropertyOverrides_WhenNull()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-layout",
+            SelectorName = "layout",
+            LabelPrefix = "Layout",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+
+        Assert.False(resolver.IsOptionApplicable(selector, "wide", 1, null));
+    }
+
+    // --- GetApplicableCssClasses with propertyOverrides tests ---
+
+    [Fact]
+    public void GetApplicableCssClasses_IncludesOption_WhenPropertyOverrideEnablesSpecificSelector()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-layout",
+            SelectorName = "layout",
+            LabelPrefix = "Layout",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+        selector.Add(new ContentAreaItemOption { Id = "1-12", Name = "Full", CssClass = "col-1-12" });
+        selector.Add(new ContentAreaItemOption { Id = "3-12", Name = "Quarter", CssClass = "col-3-12" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        var renderSettings = new Dictionary<string, object> { ["data-layout"] = "1-12" };
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-layout"] = ["1-12", "3-12"],
+        };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 1, propertyOverrides);
+
+        Assert.Equal("col-1-12", result);
+    }
+
+    [Fact]
+    public void GetApplicableCssClasses_SkipsOption_WhenPropertyOverrideHidesSelector()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+        selector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        var renderSettings = new Dictionary<string, object> { ["data-theme"] = "black" };
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-theme"] = null, // hidden on this property
+        };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 1, propertyOverrides);
+
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void GetApplicableCssClasses_ContentTypeRestriction_TakesPriority_OverPropertyOverride()
+    {
+        // Block type restricts theme to "black" and "white"
+        var repo = CreateRepository((42, typeof(BlockWithThemeRestriction)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+        selector.Add(new ContentAreaItemOption { Id = "blue", Name = "Blue", CssClass = "theme-blue" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        // Property allows "blue" but the block type doesn't
+        var renderSettings = new Dictionary<string, object> { ["data-theme"] = "blue" };
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-theme"] = ["blue"],
+        };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 42, propertyOverrides);
+
+        Assert.Equal("", result);
+    }
+
+    // --- Precedence: content-type (item) > property (content area) > global (registry) ---
+
+    [Fact]
+    public void Precedence_ContentTypeAllows_OverridesPropertyHide()
+    {
+        // Block type explicitly opts into theme with "black" and "white"
+        // Property hides theme — but block-type restriction takes priority
+        var repo = CreateRepository((42, typeof(BlockWithThemeRestriction)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-theme"] = null, // property hides it
+        };
+
+        // Block type allows "black" → takes priority over property hide
+        Assert.True(resolver.IsOptionApplicable(selector, "black", 42, propertyOverrides));
+    }
+
+    [Fact]
+    public void Precedence_ContentTypeHides_OverridesPropertyAllow()
+    {
+        // Block type hides margin
+        // Property allows margin — but block-type restriction takes priority
+        var repo = CreateRepository((10, typeof(BlockWithHiddenMargin)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-margin",
+            SelectorName = "margin",
+            LabelPrefix = "Margin",
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-margin"] = [], // property enables all
+        };
+
+        Assert.False(resolver.IsOptionApplicable(selector, "top", 10, propertyOverrides));
+    }
+
+    [Fact]
+    public void Precedence_ContentTypeRestricts_OverridesPropertyBroaderAllow()
+    {
+        // Block type only allows "black" and "white" for theme
+        // Property allows all theme options — block-type restriction still applies
+        var repo = CreateRepository((42, typeof(BlockWithThemeRestriction)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-theme"] = [], // property enables all
+        };
+
+        Assert.True(resolver.IsOptionApplicable(selector, "black", 42, propertyOverrides));
+        Assert.False(resolver.IsOptionApplicable(selector, "blue", 42, propertyOverrides));
+    }
+
+    [Fact]
+    public void Precedence_PropertyOverride_OverridesGlobalSpecificAvailability()
+    {
+        // No block-type restriction, Availability = Specific, property enables the selector
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-layout",
+            SelectorName = "layout",
+            LabelPrefix = "Layout",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-layout"] = ["wide"],
+        };
+
+        Assert.True(resolver.IsOptionApplicable(selector, "wide", 1, propertyOverrides));
+        Assert.False(resolver.IsOptionApplicable(selector, "narrow", 1, propertyOverrides));
+    }
+
+    [Fact]
+    public void Precedence_PropertyHide_OverridesGlobalAllAvailability()
+    {
+        // No block-type restriction, Availability = All, property hides the selector
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+            Availability = ContentAreaItemOptionsAvailability.All,
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-theme"] = null, // property hides it
+        };
+
+        Assert.False(resolver.IsOptionApplicable(selector, "black", 1, propertyOverrides));
+    }
+
+    [Fact]
+    public void Precedence_NoRestrictionNoOverride_FallsBackToGlobalAvailability()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selectorAll = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+            Availability = ContentAreaItemOptionsAvailability.All,
+        };
+
+        var selectorSpecific = new ItemOptions
+        {
+            AttributeName = "data-layout",
+            SelectorName = "layout",
+            LabelPrefix = "Layout",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+
+        // Availability.All → allowed
+        Assert.True(resolver.IsOptionApplicable(selectorAll, "black", 1));
+        // Availability.Specific → denied (no opt-in)
+        Assert.False(resolver.IsOptionApplicable(selectorSpecific, "wide", 1));
+    }
+
+    [Fact]
+    public void Precedence_GetApplicableCssClasses_FullChain()
+    {
+        // Set up: theme restricted at block level, layout enabled at property level,
+        // margin has global Availability.All with no overrides
+        var repo = CreateRepository((42, typeof(BlockWithThemeRestriction)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var themeSelector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+        themeSelector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
+        themeSelector.Add(new ContentAreaItemOption { Id = "blue", Name = "Blue", CssClass = "theme-blue" });
+
+        var layoutSelector = new ItemOptions
+        {
+            AttributeName = "data-layout",
+            SelectorName = "layout",
+            LabelPrefix = "Layout",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+        layoutSelector.Add(new ContentAreaItemOption { Id = "wide", Name = "Wide", CssClass = "layout-wide" });
+
+        var marginSelector = new ItemOptions
+        {
+            AttributeName = "data-margin",
+            SelectorName = "margin",
+            LabelPrefix = "Margin",
+            Availability = ContentAreaItemOptionsAvailability.All,
+        };
+        marginSelector.Add(new ContentAreaItemOption { Id = "top", Name = "Top", CssClass = "margin-top" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(themeSelector);
+        registry.Add(layoutSelector);
+        registry.Add(marginSelector);
+
+        var renderSettings = new Dictionary<string, object>
+        {
+            ["data-theme"] = "blue",   // restricted at item level (only black/white)
+            ["data-layout"] = "wide",  // enabled at property level
+            ["data-margin"] = "top",   // allowed by global Availability.All
+        };
+
+        var propertyOverrides = new Dictionary<string, string[]?>
+        {
+            ["data-layout"] = ["wide"],
+        };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 42, propertyOverrides);
+
+        // "blue" is blocked by block-type restriction → no theme class
+        // "wide" is enabled by property override → layout-wide included
+        // "top" has no restriction, Availability.All → margin-top included
+        Assert.Equal("layout-wide margin-top", result);
+    }
 }

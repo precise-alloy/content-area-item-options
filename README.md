@@ -122,9 +122,12 @@ public void ConfigureServices(IServiceCollection services)
 
 ### 3. Apply Options During Rendering
 
-Override `ContentAreaRenderer` to read the selected values from render settings and apply them. The library's `GetApplicableCssClasses` method validates that each option is still applicable for the content type — stale render settings left behind after a selector was hidden or restricted are automatically ignored:
+Override `ContentAreaRenderer` to read the selected values from render settings and apply them. The library's `GetApplicableCssClasses` method validates that each option is still applicable for the content type — stale render settings left behind after a selector was hidden or restricted are automatically ignored.
+
+When you use `[ContentAreaItemOptions]` or `[HideContentAreaItemOptions]` on a ContentArea **property**, pass the property-level overrides so they are respected during rendering:
 
 ```csharp
+using System.Reflection;
 using EPiServer;
 using EPiServer.Core;
 using EPiServer.Web.Mvc.Html;
@@ -162,13 +165,37 @@ public class CustomContentAreaRenderer : ContentAreaRenderer
             ? content.ContentTypeID
             : (int?)null;
 
+        // Extract property-level overrides from the ContentArea property attributes.
+        // This handles [ContentAreaItemOptions] / [HideContentAreaItemOptions] placed
+        // on the ContentArea property (e.g. on StartPage.MainContentArea).
+        var propertyOverrides = GetPropertyOverrides(htmlHelper);
+
         var customClasses = _restrictionResolver.GetApplicableCssClasses(
-            _optionsRegistry, renderSettings, contentTypeId);
+            _optionsRegistry, renderSettings, contentTypeId, propertyOverrides);
 
         // Pass classes to your view via ViewBag, htmlTag, or however you render blocks
         htmlHelper.ViewBag.CustomCssClasses = customClasses;
 
         base.RenderContentAreaItem(htmlHelper, contentAreaItem, templateTag, htmlTag, cssClass);
+    }
+
+    private static Dictionary<string, string[]?>? GetPropertyOverrides(IHtmlHelper htmlHelper)
+    {
+        var propertyName = htmlHelper.ViewData.TemplateInfo.HtmlFieldPrefix;
+        if (string.IsNullOrEmpty(propertyName))
+        {
+            return null;
+        }
+
+        var modelType = htmlHelper.ViewData.ModelMetadata.ContainerType;
+        var property = modelType?.GetProperty(propertyName);
+        if (property is null)
+        {
+            return null;
+        }
+
+        var attributes = property.GetCustomAttributes<Attribute>(inherit: true);
+        return ContentAreaItemOptionsMetadataExtender.BuildOverrides(attributes);
     }
 }
 ```
@@ -292,7 +319,13 @@ public class StartPage : PageData
 | `[HideContentAreaItemOptions("data-custom-layout")]`     | The layout selector is hidden for items in this area  |
 | No attribute                                             | Falls back to block-type rules / Availability setting |
 
-> **Precedence**: Block-class attributes take priority over ContentArea property attributes. If a block type has its own `[ContentAreaItemOptions]` or `[HideContentAreaItemOptions]` for a selector, that restriction applies even if the ContentArea property enables all options.
+> **Precedence**: Block-class attributes take priority over ContentArea property attributes, which in turn take priority over the global `Availability` setting. The full precedence chain is:
+>
+> 1. **Content-type (block class)** — `[ContentAreaItemOptions]` / `[HideContentAreaItemOptions]` on the block type
+> 2. **ContentArea property** — Same attributes on the `ContentArea` property
+> 3. **Global** — The selector's `Availability` setting (`All` or `Specific`)
+>
+> If a block type has its own `[ContentAreaItemOptions]` or `[HideContentAreaItemOptions]` for a selector, that restriction applies even if the ContentArea property enables all options. This precedence is enforced both in the editor UI and during rendering via `GetApplicableCssClasses` / `IsOptionApplicable`.
 
 ## REST Store Endpoint
 
