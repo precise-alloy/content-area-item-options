@@ -74,4 +74,84 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
             ? map
             : new Dictionary<int, string[]?>();
     }
+
+    /// <summary>
+    /// Determines whether a specific option is applicable for a content type,
+    /// taking into account <see cref="ContentAreaItemOptionsAttribute"/>,
+    /// <see cref="HideContentAreaItemOptionsAttribute"/>, and the selector's
+    /// <see cref="ContentAreaItemOptions.Availability"/> setting.
+    /// </summary>
+    /// <param name="selector">The selector that owns the option.</param>
+    /// <param name="optionId">The option identifier to check.</param>
+    /// <param name="contentTypeId">The content type ID of the block being rendered.</param>
+    /// <returns><c>true</c> if the option should be applied; <c>false</c> if it has been hidden or restricted.</returns>
+    public bool IsOptionApplicable(Models.ContentAreaItemOptions selector, string optionId, int contentTypeId)
+    {
+        var restrictions = GetRestrictions(selector.AttributeName);
+
+        if (restrictions.TryGetValue(contentTypeId, out var allowedIds))
+        {
+            // null = selector is hidden for this content type
+            if (allowedIds is null)
+            {
+                return false;
+            }
+
+            // Non-empty = only these option IDs are allowed
+            if (allowedIds.Length > 0
+                && !allowedIds.Contains(optionId, StringComparer.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+        else if (selector.Availability == ContentAreaItemOptionsAvailability.Specific)
+        {
+            // Specific mode: hidden unless content type explicitly opts in
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Collects CSS classes from applicable options in the render settings.
+    /// Options that have been hidden or restricted for the given content type are skipped.
+    /// </summary>
+    /// <param name="registry">The registry containing all selectors.</param>
+    /// <param name="renderSettings">The content area item's render settings.</param>
+    /// <param name="contentTypeId">
+    /// The content type ID of the block being rendered.
+    /// When <c>null</c>, restriction checks are skipped and all stored options are returned.
+    /// </param>
+    /// <returns>A space-separated string of CSS classes from applicable options.</returns>
+    public string GetApplicableCssClasses(
+        ContentAreaItemOptionsRegistry registry,
+        IDictionary<string, object> renderSettings,
+        int? contentTypeId)
+    {
+        var classes = new List<string>();
+
+        foreach (var selector in registry)
+        {
+            if (!renderSettings.TryGetValue(selector.AttributeName, out var value)
+                || value is not string id)
+            {
+                continue;
+            }
+
+            // Skip options that are no longer applicable for this content type
+            if (contentTypeId.HasValue
+                && !IsOptionApplicable(selector, id, contentTypeId.Value))
+            {
+                continue;
+            }
+
+            if (selector.Get(id) is { CssClass: not null } option)
+            {
+                classes.Add(option.CssClass);
+            }
+        }
+
+        return string.Join(" ", classes);
+    }
 }

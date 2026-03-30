@@ -2,6 +2,7 @@ using EPiServer.DataAbstraction;
 using NSubstitute;
 using TuyenPham.ContentAreaItemOptions.Infrastructure;
 using TuyenPham.ContentAreaItemOptions.Models;
+using ItemOptions = TuyenPham.ContentAreaItemOptions.Models.ContentAreaItemOptions;
 
 namespace TuyenPham.ContentAreaItemOptions.Tests.Infrastructure;
 
@@ -206,5 +207,330 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         Assert.Single(result);
         Assert.True(result.ContainsKey(1));
         Assert.False(result.ContainsKey(2));
+    }
+
+    // --- IsOptionApplicable tests ---
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsTrue_WhenNoRestrictions_AvailabilityAll()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+            Availability = ContentAreaItemOptionsAvailability.All,
+        };
+
+        Assert.True(resolver.IsOptionApplicable(selector, "black", 1));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsFalse_WhenNoRestrictions_AvailabilitySpecific()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+
+        Assert.False(resolver.IsOptionApplicable(selector, "black", 1));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsTrue_WhenOptionIsInAllowedList()
+    {
+        var repo = CreateRepository((42, typeof(BlockWithThemeRestriction)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+
+        Assert.True(resolver.IsOptionApplicable(selector, "black", 42));
+        Assert.True(resolver.IsOptionApplicable(selector, "white", 42));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsFalse_WhenOptionIsNotInAllowedList()
+    {
+        var repo = CreateRepository((42, typeof(BlockWithThemeRestriction)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+
+        Assert.False(resolver.IsOptionApplicable(selector, "blue", 42));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsFalse_WhenSelectorIsHidden()
+    {
+        var repo = CreateRepository((10, typeof(BlockWithHiddenMargin)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-margin",
+            SelectorName = "margin",
+            LabelPrefix = "Margin",
+        };
+
+        Assert.False(resolver.IsOptionApplicable(selector, "top", 10));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_ReturnsTrue_WhenEmptyAllowedList_MeansAllOptions()
+    {
+        // BlockWithMultipleAttributes has [ContentAreaItemOptions("data-theme")] → empty allowed list
+        var repo = CreateRepository((5, typeof(BlockWithMultipleAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+
+        Assert.True(resolver.IsOptionApplicable(selector, "any-option", 5));
+    }
+
+    [Fact]
+    public void IsOptionApplicable_IsCaseInsensitive_ForOptionId()
+    {
+        var repo = CreateRepository((42, typeof(BlockWithThemeRestriction)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+
+        Assert.True(resolver.IsOptionApplicable(selector, "BLACK", 42));
+        Assert.True(resolver.IsOptionApplicable(selector, "White", 42));
+    }
+
+    // --- GetApplicableCssClasses tests ---
+
+    [Fact]
+    public void GetApplicableCssClasses_ReturnsClasses_ForApplicableOptions()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+        selector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
+        selector.Add(new ContentAreaItemOption { Id = "white", Name = "White", CssClass = "theme-white" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        var renderSettings = new Dictionary<string, object> { ["data-theme"] = "black" };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 1);
+
+        Assert.Equal("theme-black", result);
+    }
+
+    [Fact]
+    public void GetApplicableCssClasses_SkipsHiddenSelector()
+    {
+        var repo = CreateRepository((10, typeof(BlockWithHiddenMargin)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-margin",
+            SelectorName = "margin",
+            LabelPrefix = "Margin",
+        };
+        selector.Add(new ContentAreaItemOption { Id = "top", Name = "Top", CssClass = "margin-top" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        var renderSettings = new Dictionary<string, object> { ["data-margin"] = "top" };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 10);
+
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void GetApplicableCssClasses_SkipsRestrictedOption()
+    {
+        var repo = CreateRepository((42, typeof(BlockWithThemeRestriction)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+        selector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
+        selector.Add(new ContentAreaItemOption { Id = "blue", Name = "Blue", CssClass = "theme-blue" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        // "blue" is not in the allowed list for content type 42 (only "black" and "white")
+        var renderSettings = new Dictionary<string, object> { ["data-theme"] = "blue" };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 42);
+
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void GetApplicableCssClasses_ReturnsMultipleClasses_FromMultipleSelectors()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var themeSelector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+        themeSelector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
+
+        var marginSelector = new ItemOptions
+        {
+            AttributeName = "data-margin",
+            SelectorName = "margin",
+            LabelPrefix = "Margin",
+        };
+        marginSelector.Add(new ContentAreaItemOption { Id = "top", Name = "Top", CssClass = "margin-top" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(themeSelector);
+        registry.Add(marginSelector);
+
+        var renderSettings = new Dictionary<string, object>
+        {
+            ["data-theme"] = "black",
+            ["data-margin"] = "top",
+        };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 1);
+
+        Assert.Equal("theme-black margin-top", result);
+    }
+
+    [Fact]
+    public void GetApplicableCssClasses_SkipsRestrictionCheck_WhenContentTypeIdIsNull()
+    {
+        var repo = CreateRepository((10, typeof(BlockWithHiddenMargin)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-margin",
+            SelectorName = "margin",
+            LabelPrefix = "Margin",
+        };
+        selector.Add(new ContentAreaItemOption { Id = "top", Name = "Top", CssClass = "margin-top" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        var renderSettings = new Dictionary<string, object> { ["data-margin"] = "top" };
+
+        // null contentTypeId → no restriction check, returns the class
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, null);
+
+        Assert.Equal("margin-top", result);
+    }
+
+    [Fact]
+    public void GetApplicableCssClasses_SkipsOption_WithNullCssClass()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+        selector.Add(new ContentAreaItemOption { Id = "none", Name = "None", CssClass = null });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        var renderSettings = new Dictionary<string, object> { ["data-theme"] = "none" };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 1);
+
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void GetApplicableCssClasses_SkipsSelector_WhenNotInRenderSettings()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+        selector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        var renderSettings = new Dictionary<string, object>();
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 1);
+
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void GetApplicableCssClasses_SkipsSpecificSelector_WhenContentTypeNotOptedIn()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-layout",
+            SelectorName = "layout",
+            LabelPrefix = "Layout",
+            Availability = ContentAreaItemOptionsAvailability.Specific,
+        };
+        selector.Add(new ContentAreaItemOption { Id = "wide", Name = "Wide", CssClass = "layout-wide" });
+
+        var registry = new ContentAreaItemOptionsRegistry();
+        registry.Add(selector);
+
+        // Stale render setting from when the option was previously enabled
+        var renderSettings = new Dictionary<string, object> { ["data-layout"] = "wide" };
+
+        var result = resolver.GetApplicableCssClasses(registry, renderSettings, 1);
+
+        Assert.Equal("", result);
     }
 }

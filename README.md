@@ -122,19 +122,29 @@ public void ConfigureServices(IServiceCollection services)
 
 ### 3. Apply Options During Rendering
 
-Override `ContentAreaRenderer` to read the selected values from render settings and apply them. Here's an example that collects CSS classes from all selectors:
+Override `ContentAreaRenderer` to read the selected values from render settings and apply them. The library's `GetApplicableCssClasses` method validates that each option is still applicable for the content type — stale render settings left behind after a selector was hidden or restricted are automatically ignored:
 
 ```csharp
+using EPiServer;
+using EPiServer.Core;
 using EPiServer.Web.Mvc.Html;
+using TuyenPham.ContentAreaItemOptions.Infrastructure;
 using TuyenPham.ContentAreaItemOptions.Models;
 
 public class CustomContentAreaRenderer : ContentAreaRenderer
 {
     private readonly ContentAreaItemOptionsRegistry _optionsRegistry;
+    private readonly ContentAreaItemOptionsRestrictionResolver _restrictionResolver;
+    private readonly IContentLoader _contentLoader;
 
-    public CustomContentAreaRenderer(ContentAreaItemOptionsRegistry optionsRegistry)
+    public CustomContentAreaRenderer(
+        ContentAreaItemOptionsRegistry optionsRegistry,
+        ContentAreaItemOptionsRestrictionResolver restrictionResolver,
+        IContentLoader contentLoader)
     {
         _optionsRegistry = optionsRegistry;
+        _restrictionResolver = restrictionResolver;
+        _contentLoader = contentLoader;
     }
 
     protected override void RenderContentAreaItem(
@@ -147,29 +157,18 @@ public class CustomContentAreaRenderer : ContentAreaRenderer
         var renderSettings = contentAreaItem.RenderSettings
             ?? new Dictionary<string, object>();
 
-        var customClasses = GetCustomCssClasses(renderSettings);
+        var contentTypeId = _contentLoader.TryGet<ContentData>(
+            contentAreaItem.ContentLink, out var content)
+            ? content.ContentTypeID
+            : (int?)null;
+
+        var customClasses = _restrictionResolver.GetApplicableCssClasses(
+            _optionsRegistry, renderSettings, contentTypeId);
 
         // Pass classes to your view via ViewBag, htmlTag, or however you render blocks
         htmlHelper.ViewBag.CustomCssClasses = customClasses;
 
         base.RenderContentAreaItem(htmlHelper, contentAreaItem, templateTag, htmlTag, cssClass);
-    }
-
-    private string GetCustomCssClasses(IDictionary<string, object> renderSettings)
-    {
-        var classes = new List<string>();
-
-        foreach (var selector in _optionsRegistry)
-        {
-            if (renderSettings.TryGetValue(selector.AttributeName, out var value)
-                && value is string id
-                && selector.Get(id) is { CssClass: not null } option)
-            {
-                classes.Add(option.CssClass);
-            }
-        }
-
-        return string.Join(" ", classes);
     }
 }
 ```
