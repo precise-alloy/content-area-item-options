@@ -122,12 +122,11 @@ public void ConfigureServices(IServiceCollection services)
 
 ### 3. Apply Options During Rendering
 
-Override `ContentAreaRenderer` to read the selected values from render settings and apply them. The library's `GetApplicableCssClasses` method validates that each option is still applicable for the content type — stale render settings left behind after a selector was hidden or restricted are automatically ignored.
+Override `ContentAreaRenderer` to read the selected values from render settings and apply them. The library's `GetApplicableCssClasses` method validates that each option is still applicable — checking content-type restrictions, ContentArea property overrides, and the global `Availability` setting. Stale render settings left behind after a selector was hidden or restricted are automatically ignored.
 
-When you use `[ContentAreaItemOptions]` or `[HideContentAreaItemOptions]` on a ContentArea **property**, pass the property-level overrides so they are respected during rendering:
+When you use `[ContentAreaItemOptions]` or `[HideContentAreaItemOptions]` on a ContentArea **property**, override `Render` to capture the property-level overrides once, then pass them to `GetApplicableCssClasses` for each item:
 
 ```csharp
-using System.Reflection;
 using EPiServer;
 using EPiServer.Core;
 using EPiServer.Web.Mvc.Html;
@@ -140,6 +139,9 @@ public class CustomContentAreaRenderer : ContentAreaRenderer
     private readonly ContentAreaItemOptionsRestrictionResolver _restrictionResolver;
     private readonly IContentLoader _contentLoader;
 
+    // Captured per Render() call — safe because the renderer is registered as Transient
+    private Dictionary<string, string[]?>? _propertyOverrides;
+
     public CustomContentAreaRenderer(
         ContentAreaItemOptionsRegistry optionsRegistry,
         ContentAreaItemOptionsRestrictionResolver restrictionResolver,
@@ -148,6 +150,23 @@ public class CustomContentAreaRenderer : ContentAreaRenderer
         _optionsRegistry = optionsRegistry;
         _restrictionResolver = restrictionResolver;
         _contentLoader = contentLoader;
+    }
+
+    public override void Render(IHtmlHelper htmlHelper, ContentArea contentArea)
+    {
+        // Extract property-level overrides from the ContentArea property attributes.
+        // This handles [ContentAreaItemOptions] / [HideContentAreaItemOptions] placed
+        // on the ContentArea property (e.g. on StartPage.MainContentArea).
+        var metadata = htmlHelper.ViewData.ModelMetadata;
+        _propertyOverrides = metadata.ContainerType is not null
+            && metadata.PropertyName is not null
+            ? ContentAreaItemOptionsMetadataExtender.GetPropertyOverrides(
+                metadata.ContainerType, metadata.PropertyName)
+            : null;
+
+        base.Render(htmlHelper, contentArea);
+
+        _propertyOverrides = null;
     }
 
     protected override void RenderContentAreaItem(
@@ -165,37 +184,13 @@ public class CustomContentAreaRenderer : ContentAreaRenderer
             ? content.ContentTypeID
             : (int?)null;
 
-        // Extract property-level overrides from the ContentArea property attributes.
-        // This handles [ContentAreaItemOptions] / [HideContentAreaItemOptions] placed
-        // on the ContentArea property (e.g. on StartPage.MainContentArea).
-        var propertyOverrides = GetPropertyOverrides(htmlHelper);
-
         var customClasses = _restrictionResolver.GetApplicableCssClasses(
-            _optionsRegistry, renderSettings, contentTypeId, propertyOverrides);
+            _optionsRegistry, renderSettings, contentTypeId, _propertyOverrides);
 
         // Pass classes to your view via ViewBag, htmlTag, or however you render blocks
         htmlHelper.ViewBag.CustomCssClasses = customClasses;
 
         base.RenderContentAreaItem(htmlHelper, contentAreaItem, templateTag, htmlTag, cssClass);
-    }
-
-    private static Dictionary<string, string[]?>? GetPropertyOverrides(IHtmlHelper htmlHelper)
-    {
-        var propertyName = htmlHelper.ViewData.TemplateInfo.HtmlFieldPrefix;
-        if (string.IsNullOrEmpty(propertyName))
-        {
-            return null;
-        }
-
-        var modelType = htmlHelper.ViewData.ModelMetadata.ContainerType;
-        var property = modelType?.GetProperty(propertyName);
-        if (property is null)
-        {
-            return null;
-        }
-
-        var attributes = property.GetCustomAttributes<Attribute>(inherit: true);
-        return ContentAreaItemOptionsMetadataExtender.BuildOverrides(attributes);
     }
 }
 ```

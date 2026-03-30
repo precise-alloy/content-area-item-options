@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using EPiServer.Core;
 using EPiServer.Shell.ObjectEditing;
 using EPiServer.Shell.ObjectEditing.EditorDescriptors;
@@ -61,5 +62,24 @@ public sealed class ContentAreaItemOptionsMetadataExtender : EditorDescriptor
         }
 
         return overrides;
+    }
+
+    /// <summary>
+    /// Extracts property-level overrides from <see cref="ContentAreaItemOptionsAttribute"/> and
+    /// <see cref="HideContentAreaItemOptionsAttribute"/> on a specific <see cref="ContentArea"/> property.
+    /// Returns <c>null</c> when the property has no relevant attributes or cannot be found.
+    /// </summary>
+    /// <param name="ownerType">The type that declares the ContentArea property (e.g. a page or block model type).</param>
+    /// <param name="propertyName">The name of the ContentArea property.</param>
+    /// <returns>A dictionary of attribute name → allowed option IDs, or <c>null</c> if no overrides apply.</returns>
+    public static Dictionary<string, string[]?>? GetPropertyOverrides(Type ownerType, string propertyName)
+    {
+        var property = ownerType.GetProperty(propertyName);
+        if (property is null)
+        {
+            return null;
+        }
+
+        return BuildOverrides(property.GetCustomAttributes<Attribute>(inherit: true));
     }
 }
