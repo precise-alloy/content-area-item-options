@@ -1,7 +1,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 
-const releaseDir = resolve('TuyenPham.ContentAreaItemOptions/bin/Release');
+const releaseDir = resolve('./nupkg');
 const destDir = resolve('../backend/local-packages');
 
 // Find the latest .nupkg by modified time
