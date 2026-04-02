@@ -14,7 +14,7 @@ namespace TuyenPham.ContentAreaItemOptions.Infrastructure;
 /// </para>
 /// </summary>
 [RestStore("content-area-options")]
-[ValidateAntiForgeryReleaseToken]
+[ValidateAntiForgeryToken]
 public sealed class ContentAreaOptionsStore(
     ContentAreaItemOptionsRegistry registry,
     ContentAreaItemOptionsRestrictionResolver restrictionResolver)

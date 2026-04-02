@@ -355,5 +355,12 @@ dotnet run --project TuyenPham.ContentAreaItemOptions.Tests
 
 ## Requirements
 
+From version 3.0.0:
+
+- Optimizely CMS 13 (EPiServer.CMS.Core 13.0.0+)
+- .NET 10.0+
+
+For older versions:
+
 - Optimizely CMS 12 (EPiServer.CMS.Core 12.23.1+)
 - .NET 8.0+
