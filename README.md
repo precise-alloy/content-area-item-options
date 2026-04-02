@@ -353,6 +353,12 @@ Run the tests:
 dotnet run --project TuyenPham.ContentAreaItemOptions.Tests
 ```
 
+## Change logs
+
+### v3.0.0
+
+- Update to .NET 10 and CMS 13
+
 ## Requirements
 
 From version 3.0.0:
