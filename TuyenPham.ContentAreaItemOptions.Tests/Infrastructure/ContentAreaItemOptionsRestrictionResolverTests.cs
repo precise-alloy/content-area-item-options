@@ -74,7 +74,7 @@ public class ContentAreaItemOptionsRestrictionResolverTests
     public void GetRestrictions_ReturnsEmptyDictionary_WhenNoContentTypes()
     {
         var repo = Substitute.For<IContentTypeRepository>();
-        repo.List().Returns(new List<ContentType>());
+        repo.List().Returns([]);
         var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
 
         var result = resolver.GetRestrictions("data-anything");
@@ -92,7 +92,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
 
         Assert.Single(result);
         Assert.True(result.ContainsKey(42));
-        Assert.Equal(["black", "white"], result[42]);
+
+        var themes = result[42];
+        Assert.NotNull(themes);
+        Assert.Equal(["black", "white"], themes);
     }
 
     [Fact]
@@ -122,7 +125,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         var layoutResult = resolver.GetRestrictions("data-layout");
         Assert.Single(layoutResult);
         Assert.True(layoutResult.ContainsKey(5));
-        Assert.Equal(["wide"], layoutResult[5]);
+
+        var layout = layoutResult[5];
+        Assert.NotNull(layout);
+        Assert.Equal(["wide"], layout);
     }
 
     [Fact]
@@ -147,7 +153,11 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         var result = resolver.GetRestrictions("data-theme");
 
         Assert.Equal(2, result.Count);
-        Assert.Equal(["black", "white"], result[1]);
+
+        var themes = result[1];
+        Assert.NotNull(themes);
+        Assert.Equal(["black", "white"], themes);
+
         Assert.Empty(result[2]!); // all options enabled
     }
 
@@ -172,7 +182,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
 
         var themeResult = resolver.GetRestrictions("data-theme");
         Assert.Single(themeResult);
-        Assert.Equal(["red", "green"], themeResult[7]);
+
+        var themes = themeResult[7];
+        Assert.NotNull(themes);
+        Assert.Equal(["red", "green"], themes);
 
         var marginResult = resolver.GetRestrictions("data-margin");
         Assert.Single(marginResult);
@@ -338,8 +351,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         selector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
         selector.Add(new ContentAreaItemOption { Id = "white", Name = "White", CssClass = "theme-white" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         var renderSettings = new Dictionary<string, object> { ["data-theme"] = "black" };
 
@@ -362,8 +377,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         };
         selector.Add(new ContentAreaItemOption { Id = "top", Name = "Top", CssClass = "margin-top" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         var renderSettings = new Dictionary<string, object> { ["data-margin"] = "top" };
 
@@ -387,8 +404,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         selector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
         selector.Add(new ContentAreaItemOption { Id = "blue", Name = "Blue", CssClass = "theme-blue" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         // "blue" is not in the allowed list for content type 42 (only "black" and "white")
         var renderSettings = new Dictionary<string, object> { ["data-theme"] = "blue" };
@@ -420,9 +439,11 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         };
         marginSelector.Add(new ContentAreaItemOption { Id = "top", Name = "Top", CssClass = "margin-top" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(themeSelector);
-        registry.Add(marginSelector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            themeSelector,
+            marginSelector
+        };
 
         var renderSettings = new Dictionary<string, object>
         {
@@ -449,8 +470,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         };
         selector.Add(new ContentAreaItemOption { Id = "top", Name = "Top", CssClass = "margin-top" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         var renderSettings = new Dictionary<string, object> { ["data-margin"] = "top" };
 
@@ -474,8 +497,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         };
         selector.Add(new ContentAreaItemOption { Id = "none", Name = "None", CssClass = null });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         var renderSettings = new Dictionary<string, object> { ["data-theme"] = "none" };
 
@@ -498,8 +523,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         };
         selector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         var renderSettings = new Dictionary<string, object>();
 
@@ -523,8 +550,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         };
         selector.Add(new ContentAreaItemOption { Id = "wide", Name = "Wide", CssClass = "layout-wide" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         // Stale render setting from when the option was previously enabled
         var renderSettings = new Dictionary<string, object> { ["data-layout"] = "wide" };
@@ -676,8 +705,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         selector.Add(new ContentAreaItemOption { Id = "1-12", Name = "Full", CssClass = "col-1-12" });
         selector.Add(new ContentAreaItemOption { Id = "3-12", Name = "Quarter", CssClass = "col-3-12" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         var renderSettings = new Dictionary<string, object> { ["data-layout"] = "1-12" };
         var propertyOverrides = new Dictionary<string, string[]?>
@@ -704,8 +735,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         };
         selector.Add(new ContentAreaItemOption { Id = "black", Name = "Black", CssClass = "theme-black" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         var renderSettings = new Dictionary<string, object> { ["data-theme"] = "black" };
         var propertyOverrides = new Dictionary<string, string[]?>
@@ -733,8 +766,10 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         };
         selector.Add(new ContentAreaItemOption { Id = "blue", Name = "Blue", CssClass = "theme-blue" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(selector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            selector
+        };
 
         // Property allows "blue" but the block type doesn't
         var renderSettings = new Dictionary<string, object> { ["data-theme"] = "blue" };
@@ -926,10 +961,12 @@ public class ContentAreaItemOptionsRestrictionResolverTests
         };
         marginSelector.Add(new ContentAreaItemOption { Id = "top", Name = "Top", CssClass = "margin-top" });
 
-        var registry = new ContentAreaItemOptionsRegistry();
-        registry.Add(themeSelector);
-        registry.Add(layoutSelector);
-        registry.Add(marginSelector);
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            themeSelector,
+            layoutSelector,
+            marginSelector
+        };
 
         var renderSettings = new Dictionary<string, object>
         {

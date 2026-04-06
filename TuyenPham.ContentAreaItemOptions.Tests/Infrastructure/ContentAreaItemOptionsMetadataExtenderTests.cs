@@ -51,7 +51,10 @@ public class ContentAreaItemOptionsMetadataExtenderTests
         Assert.NotNull(result);
         Assert.Single(result);
         Assert.True(result.ContainsKey("data-theme"));
-        Assert.Equal(["black", "white"], result["data-theme"]);
+
+        var themes = result?["data-theme"];
+        Assert.NotNull(themes);
+        Assert.Equal(["black", "white"], themes);
     }
 
     [Fact]
@@ -117,8 +120,15 @@ public class ContentAreaItemOptionsMetadataExtenderTests
 
         Assert.NotNull(result);
         Assert.Equal(3, result.Count);
-        Assert.Equal(["black"], result["data-theme"]);
-        Assert.Equal(["top", "bottom"], result["data-margin"]);
+
+        var themes = result["data-theme"];
+        Assert.NotNull(themes);
+        Assert.Equal(["black"], themes);
+
+        var margins = result["data-margin"];
+        Assert.NotNull(margins);
+        Assert.Equal(["top", "bottom"], margins);
+
         Assert.Null(result["data-layout"]);
     }
 
@@ -152,7 +162,11 @@ public class ContentAreaItemOptionsMetadataExtenderTests
 
         Assert.NotNull(result);
         Assert.Equal(2, result.Count);
-        Assert.Equal(["dark", "light"], result["data-theme"]);
+
+        var themes = result["data-theme"];
+        Assert.NotNull(themes);
+        Assert.Equal(["dark", "light"], themes);
+
         Assert.Null(result["data-margin"]);
     }
 
@@ -170,7 +184,10 @@ public class ContentAreaItemOptionsMetadataExtenderTests
 
         Assert.NotNull(result);
         Assert.Single(result);
-        Assert.Equal(["black"], result["data-theme"]);
+
+        var themes = result["data-theme"];
+        Assert.NotNull(themes);
+        Assert.Equal(["black"], themes);
     }
 
     // --- GetPropertyOverrides tests ---
@@ -183,7 +200,10 @@ public class ContentAreaItemOptionsMetadataExtenderTests
 
         Assert.NotNull(result);
         Assert.Single(result);
-        Assert.Equal(["1-12", "3-12"], result["data-columns"]);
+
+        var columns = result["data-columns"];
+        Assert.NotNull(columns);
+        Assert.Equal(["1-12", "3-12"], columns);
     }
 
     [Fact]
