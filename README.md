@@ -15,6 +15,8 @@ Editors can pick options from dropdown selectors on each content area block, and
 
 ## Installation
 
+Install from [Microsoft NuGet](https://www.nuget.org/packages/TuyenPham.ContentAreaItemOptions) or [Optimizely Nuget](https://nuget.optimizely.com/packages/tuyenpham.contentareaitemoptions):
+
 ```shell
 dotnet add package TuyenPham.ContentAreaItemOptions
 ```
