@@ -370,3 +370,7 @@ For older versions:
 
 - Optimizely CMS 12 (EPiServer.CMS.Core 12.23.1+)
 - .NET 8.0+
+
+## License
+
+Apache License, version 2.0
