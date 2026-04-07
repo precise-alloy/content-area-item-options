@@ -6,12 +6,12 @@
 
     <!-- NuGet package metadata -->
     <PackageId>TuyenPham.ContentAreaItemOptions</PackageId>
-    <Version>3.1.0</Version>
+    <Version>3.2.0</Version>
     <Title>Content Area Item Options</Title>
     <Authors>Tuyen Pham</Authors>
     <Description>Plugin to add options to content area items in Optimizely.</Description>
     <PackageProjectUrl>https://github.com/precise-alloy/content-area-item-options</PackageProjectUrl>
-    <PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>Optimizely Content Area Item Options</PackageTags>
     <Copyright>Copyright 2026</Copyright>
@@ -49,7 +49,6 @@
   <!-- Include zip as contentFiles in NuGet package -->
   <ItemGroup>
     <None Include="$(ModuleZipPath)" Pack="true" PackagePath="contentFiles\any\any\modules\_protected\$(ModuleName)" Visible="false" />
-    <None Include="..\LICENSE.txt" Pack="true" PackagePath="\" />
     <None Include="..\README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
 
