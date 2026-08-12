@@ -37,6 +37,7 @@ public sealed class ContentAreaItemOptions : IEnumerable<ContentAreaItemOption>
     /// <see cref="ContentAreaItemOptionsAvailability.All"/>: shown for all content types unless restricted by attribute.
     /// <see cref="ContentAreaItemOptionsAvailability.Specific"/>: hidden unless a content type explicitly opts in via
     /// <see cref="ContentAreaItemOptionsAttribute"/>.
+    /// <see cref="ContentAreaItemOptionsAvailability.None"/>: hidden everywhere and never applied during rendering.
     /// </summary>
     public ContentAreaItemOptionsAvailability Availability { get; set; } = ContentAreaItemOptionsAvailability.All;
 

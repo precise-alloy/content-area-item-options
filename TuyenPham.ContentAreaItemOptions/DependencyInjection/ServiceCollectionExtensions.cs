@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using EPiServer.Shell.Modules;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,22 +21,18 @@ public static class ServiceCollectionExtensions
     /// <param name="services">The service collection.</param>
     /// <param name="optionsRegistry">The registry containing all selector definitions.</param>
     /// <returns>The service collection, for chaining.</returns>
+    /// <exception cref="ArgumentException">
+    /// The registry contains selectors that would collide or that the CMS cannot persist.
+    /// All problems are reported at once.
+    /// </exception>
     public static IServiceCollection AddContentAreaItemOptions(
         this IServiceCollection services,
         ContentAreaItemOptionsRegistry optionsRegistry)
     {
-        var invalidSelectors = optionsRegistry
-            .Where(s => !s.AttributeName.StartsWith("data-", StringComparison.OrdinalIgnoreCase))
-            .Select(s => s.AttributeName)
-            .ToList();
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(optionsRegistry);
 
-        if (invalidSelectors.Count > 0)
-        {
-            throw new ArgumentException(
-                $"All ContentAreaItemOptions.AttributeName values must start with 'data-'. " +
-                $"Invalid attribute names: {string.Join(", ", invalidSelectors.Select(n => $"'{n}'"))}.",
-                nameof(optionsRegistry));
-        }
+        Validate(optionsRegistry);
 
         services.Configure<ProtectedModuleOptions>(o =>
         {
@@ -50,4 +47,63 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    private static void Validate(ContentAreaItemOptionsRegistry optionsRegistry)
+    {
+        var errors = new List<string>();
+        var selectors = optionsRegistry.ToList();
+
+        foreach (var selector in selectors)
+        {
+            if (string.IsNullOrWhiteSpace(selector.AttributeName))
+            {
+                errors.Add("A selector has an empty AttributeName.");
+            }
+            else if (!selector.AttributeName.StartsWith("data-", StringComparison.OrdinalIgnoreCase))
+            {
+                // The CMS only persists render settings whose key starts with "data-".
+                errors.Add($"AttributeName '{selector.AttributeName}' must start with 'data-'.");
+            }
+
+            if (string.IsNullOrWhiteSpace(selector.SelectorName))
+            {
+                errors.Add($"Selector '{selector.AttributeName}' has an empty SelectorName.");
+            }
+
+            var optionIds = selector.Select(o => o.Id).ToList();
+
+            if (optionIds.Any(string.IsNullOrWhiteSpace))
+            {
+                errors.Add($"Selector '{selector.AttributeName}' has an option with an empty Id.");
+            }
+
+            var duplicateOptionIds = optionIds
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .GroupBy(id => id!, StringComparer.OrdinalIgnoreCase)
+                .Where(g => g.Count() > 1)
+                .Select(g => g.Key);
+
+            foreach (var duplicate in duplicateOptionIds)
+            {
+                errors.Add($"Selector '{selector.AttributeName}' has duplicate option Id '{duplicate}'.");
+            }
+        }
+
+        errors.AddRange(FindDuplicates(selectors.Select(s => s.AttributeName), nameof(Models.ContentAreaItemOptions.AttributeName)));
+        errors.AddRange(FindDuplicates(selectors.Select(s => s.SelectorName), nameof(Models.ContentAreaItemOptions.SelectorName)));
+
+        if (errors.Count > 0)
+        {
+            throw new ArgumentException(
+                $"Invalid ContentAreaItemOptions registry:{Environment.NewLine}- {string.Join($"{Environment.NewLine}- ", errors)}",
+                nameof(optionsRegistry));
+        }
+    }
+
+    private static IEnumerable<string> FindDuplicates(IEnumerable<string> values, string propertyName) =>
+        values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .GroupBy(v => v, StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .Select(g => $"Duplicate {propertyName} '{g.Key}'. Each selector must be uniquely addressable.");
 }

@@ -2,7 +2,9 @@ import { cpSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join, resolve } from 'path';
 
 const releaseDir = resolve('./nupkg');
-const destDir = resolve('../backend/local-packages');
+
+// Override with CONTENT_AREA_ITEM_OPTIONS_DEST when consuming site lives elsewhere.
+const destDir = resolve(process.env.CONTENT_AREA_ITEM_OPTIONS_DEST ?? '../backend/local-packages');
 
 // Find the latest .nupkg by modified time
 const nupkgs = readdirSync(releaseDir)

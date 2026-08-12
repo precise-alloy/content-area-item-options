@@ -1,4 +1,4 @@
-﻿define([
+define([
   // dojo
   "dojo/_base/declare",
   "dojo/aspect",
@@ -25,44 +25,65 @@
   // custom
   ContentAreaItemCommand,
 ) {
+  // Namespaced so it cannot collide with another module's store; epi's registry
+  // throws when a name is taken.
+  var STORE_KEY = "tuyen-pham.content-area-item-options";
+  var STORE_NAME = "content-area-options";
+
   return declare([_Module], {
     initialize: function () {
       this.inherited(arguments);
 
       var registry = dependency.resolve("epi.storeregistry");
       var store = registry.create(
-        "content-area-options",
-        this._getRestPath("content-area-options"),
+        STORE_KEY,
+        routes.getRestPath({
+          moduleArea: "TuyenPham.ContentAreaItemOptions",
+          storeName: STORE_NAME,
+        }),
       );
-      var selectorsPromise = store.get();
+
+      // Resolved once per session; a failure degrades to "no selectors" rather
+      // than leaving every content area editor waiting forever.
+      var selectorsPromise = store.get().then(
+        function (selectors) {
+          return selectors || [];
+        },
+        function (error) {
+          console.error("[content-area-item-options] failed to load selectors", error);
+          return [];
+        },
+      );
 
       aspect.after(ContentAreaEditor.prototype, "postCreate", function () {
         var editor = this;
+
+        // Set from EditorConfiguration["contentAreaItemOptions"] by
+        // ContentAreaItemOptionsMetadataExtender when the ContentArea property
+        // is decorated. Widget params are mixed in before postCreate runs.
         var contentAreaOverrides = editor.contentAreaItemOptions || null;
+
         selectorsPromise.then(function (selectors) {
-          for (var i = 0; i < selectors.length; i++) {
-            var s = selectors[i];
-            var cmd = new ContentAreaItemCommand({
-              label: s.labelPrefix + ": " + s.defaultLabel,
-              attributeName: s.attributeName,
-              labelPrefix: s.labelPrefix,
-              defaultLabel: s.defaultLabel,
-              availability: s.availability || "All",
-              preloadedOptions: s.options,
-              preloadedRestrictions: s.restrictions,
+          selectors.forEach(function (selector) {
+            var command = new ContentAreaItemCommand({
+              attributeName: selector.attributeName,
+              labelPrefix: selector.labelPrefix,
+              defaultLabel: selector.defaultLabel,
+              availability: selector.availability || "All",
+              options: selector.options,
+              restrictions: selector.restrictions,
               contentAreaOverrides: contentAreaOverrides,
             });
-            editor.own(cmd);
-            editor.add("commands", cmd);
-          }
-        });
-      });
-    },
 
-    _getRestPath: function (name) {
-      return routes.getRestPath({
-        moduleArea: "TuyenPham.ContentAreaItemOptions",
-        storeName: name,
+            if (editor._destroyed) {
+              command.destroy();
+              return;
+            }
+
+            editor.own(command);
+            editor.add("commands", command);
+          });
+        });
       });
     },
   });

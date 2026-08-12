@@ -29,18 +29,7 @@ public sealed class ContentAreaOptionsStore(
     {
         if (string.IsNullOrEmpty(id))
         {
-            var selectors = registry.Select(s => new
-            {
-                selectorName = s.SelectorName,
-                attributeName = s.AttributeName,
-                labelPrefix = s.LabelPrefix,
-                defaultLabel = s.DefaultLabel,
-                availability = s.Availability.ToString(),
-                options = s.ToList(),
-                restrictions = restrictionResolver.GetRestrictions(s.AttributeName),
-            });
-
-            return Rest(selectors);
+            return Rest(registry.Select(Project).ToList());
         }
 
         var selector = registry.GetBySelectorName(id);
@@ -49,10 +38,18 @@ public sealed class ContentAreaOptionsStore(
             return NotFound();
         }
 
-        return Rest(new
-        {
-            options = selector.ToList(),
-            restrictions = restrictionResolver.GetRestrictions(selector.AttributeName),
-        });
+        return Rest(Project(selector));
     }
+
+    // Property names are camel-cased by the shell serializer; the client reads them as-is.
+    private object Project(Models.ContentAreaItemOptions selector) => new
+    {
+        selectorName = selector.SelectorName,
+        attributeName = selector.AttributeName,
+        labelPrefix = selector.LabelPrefix,
+        defaultLabel = selector.DefaultLabel,
+        availability = selector.Availability.ToString(),
+        options = selector.ToList(),
+        restrictions = restrictionResolver.GetRestrictions(selector.AttributeName),
+    };
 }

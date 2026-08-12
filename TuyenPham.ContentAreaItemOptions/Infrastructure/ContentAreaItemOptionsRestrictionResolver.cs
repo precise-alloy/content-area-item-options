@@ -18,7 +18,7 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
 {
     private readonly Lazy<Dictionary<string, Dictionary<int, string[]?>>> _restrictions = new(() =>
     {
-        var result = new Dictionary<string, Dictionary<int, string[]?>>();
+        var result = new Dictionary<string, Dictionary<int, string[]?>>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var contentType in contentTypeRepository.List())
         {
@@ -35,7 +35,7 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
             {
                 if (!result.TryGetValue(filter.AttributeName, out var map))
                 {
-                    map = new Dictionary<int, string[]?>();
+                    map = [];
                     result[filter.AttributeName] = map;
                 }
 
@@ -46,11 +46,12 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
                 .GetCustomAttributes<HideContentAreaItemOptionsAttribute>()
                 .ToList();
 
+            // Applied after the filters so hiding always wins for the same content type.
             foreach (var hide in hides)
             {
                 if (!result.TryGetValue(hide.AttributeName, out var map))
                 {
-                    map = new Dictionary<int, string[]?>();
+                    map = [];
                     result[hide.AttributeName] = map;
                 }
 
@@ -72,7 +73,7 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
     {
         return _restrictions.Value.TryGetValue(attributeName, out var map)
             ? map
-            : new Dictionary<int, string[]?>();
+            : [];
     }
 
     /// <summary>
@@ -83,7 +84,11 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
     /// </summary>
     /// <param name="selector">The selector that owns the option.</param>
     /// <param name="optionId">The option identifier to check.</param>
-    /// <param name="contentTypeId">The content type ID of the block being rendered.</param>
+    /// <param name="contentTypeId">
+    /// The content type ID of the block being rendered, or <c>null</c> when it cannot be resolved.
+    /// When <c>null</c>, content-type restrictions are skipped but property overrides and
+    /// <see cref="ContentAreaItemOptions.Availability"/> still apply.
+    /// </param>
     /// <param name="propertyOverrides">
     /// Optional per-property overrides from <see cref="ContentAreaItemOptionsMetadataExtender.BuildOverrides"/>.
     /// These are checked when no content-type-level restriction exists.
@@ -92,13 +97,20 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
     public bool IsOptionApplicable(
         Models.ContentAreaItemOptions selector,
         string optionId,
-        int contentTypeId,
+        int? contentTypeId,
         Dictionary<string, string[]?>? propertyOverrides = null)
     {
-        var restrictions = GetRestrictions(selector.AttributeName);
+        ArgumentNullException.ThrowIfNull(selector);
+
+        // None is unconditionally hidden, so no attribute can opt back in.
+        if (selector.Availability == ContentAreaItemOptionsAvailability.None)
+        {
+            return false;
+        }
 
         // Content-type-level restrictions take priority
-        if (restrictions.TryGetValue(contentTypeId, out var allowedIds))
+        if (contentTypeId.HasValue
+            && GetRestrictions(selector.AttributeName).TryGetValue(contentTypeId.Value, out var allowedIds))
         {
             return IsAllowed(allowedIds, optionId);
         }
@@ -111,12 +123,7 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
         }
 
         // No explicit restriction — fall back to Availability setting
-        if (selector.Availability == ContentAreaItemOptionsAvailability.Specific)
-        {
-            return false;
-        }
-
-        return true;
+        return selector.Availability != ContentAreaItemOptionsAvailability.Specific;
     }
 
     private static bool IsAllowed(string[]? allowedIds, string optionId)
@@ -142,10 +149,12 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
     /// Options that have been hidden or restricted for the given content type are skipped.
     /// </summary>
     /// <param name="registry">The registry containing all selectors.</param>
-    /// <param name="renderSettings">The content area item's render settings.</param>
+    /// <param name="renderSettings">
+    /// The content area item's render settings. Pass <c>contentAreaItem.RenderSettings</c> directly.
+    /// </param>
     /// <param name="contentTypeId">
-    /// The content type ID of the block being rendered.
-    /// When <c>null</c>, restriction checks are skipped and all stored options are returned.
+    /// The content type ID of the block being rendered, or <c>null</c> when it cannot be resolved.
+    /// Property overrides and <see cref="ContentAreaItemOptions.Availability"/> are still enforced when <c>null</c>.
     /// </param>
     /// <param name="propertyOverrides">
     /// Optional per-property overrides from <see cref="ContentAreaItemOptionsMetadataExtender.BuildOverrides"/>.
@@ -156,28 +165,35 @@ public sealed class ContentAreaItemOptionsRestrictionResolver(
     /// <returns>A space-separated string of CSS classes from applicable options.</returns>
     public string GetApplicableCssClasses(
         ContentAreaItemOptionsRegistry registry,
-        IDictionary<string, object> renderSettings,
+        IDictionary<string, string>? renderSettings,
         int? contentTypeId,
         Dictionary<string, string[]?>? propertyOverrides = null)
     {
+        ArgumentNullException.ThrowIfNull(registry);
+
+        if (renderSettings is null || renderSettings.Count == 0)
+        {
+            return string.Empty;
+        }
+
         var classes = new List<string>();
 
         foreach (var selector in registry)
         {
-            if (!renderSettings.TryGetValue(selector.AttributeName, out var value)
-                || value is not string id)
+            if (!renderSettings.TryGetValue(selector.AttributeName, out var id)
+                || string.IsNullOrEmpty(id))
             {
                 continue;
             }
 
             // Skip options that are no longer applicable for this content type
-            if (contentTypeId.HasValue
-                && !IsOptionApplicable(selector, id, contentTypeId.Value, propertyOverrides))
+            if (!IsOptionApplicable(selector, id, contentTypeId, propertyOverrides))
             {
                 continue;
             }
 
-            if (selector.Get(id) is { CssClass: not null } option)
+            if (selector.Get(id) is { CssClass: not null } option
+                && !string.IsNullOrWhiteSpace(option.CssClass))
             {
                 classes.Add(option.CssClass);
             }

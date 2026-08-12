@@ -18,7 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\TuyenPham.ContentAreaItemOptions\TuyenPham.ContentAreaItemOptions.csproj" />
+    <ProjectReference Include="../TuyenPham.ContentAreaItemOptions/TuyenPham.ContentAreaItemOptions.csproj" />
   </ItemGroup>
 
 </Project>

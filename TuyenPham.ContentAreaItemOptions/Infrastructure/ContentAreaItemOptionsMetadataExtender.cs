@@ -5,6 +5,7 @@ using System.Reflection;
 using EPiServer.Core;
 using EPiServer.Shell.ObjectEditing;
 using EPiServer.Shell.ObjectEditing.EditorDescriptors;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using TuyenPham.ContentAreaItemOptions.Models;
 
 namespace TuyenPham.ContentAreaItemOptions.Infrastructure;
@@ -74,6 +75,8 @@ public sealed class ContentAreaItemOptionsMetadataExtender : EditorDescriptor
     /// <returns>A dictionary of attribute name → allowed option IDs, or <c>null</c> if no overrides apply.</returns>
     public static Dictionary<string, string[]?>? GetPropertyOverrides(Type ownerType, string propertyName)
     {
+        ArgumentNullException.ThrowIfNull(ownerType);
+
         var property = ownerType.GetProperty(propertyName);
         if (property is null)
         {
@@ -82,4 +85,16 @@ public sealed class ContentAreaItemOptionsMetadataExtender : EditorDescriptor
 
         return BuildOverrides(property.GetCustomAttributes<Attribute>(inherit: true));
     }
+
+    /// <summary>
+    /// Extracts property-level overrides from the model metadata of a <see cref="ContentArea"/> property.
+    /// Intended for <c>ContentAreaRenderer.Render</c>, where
+    /// <c>htmlHelper.ViewData.ModelMetadata</c> describes the ContentArea property being rendered.
+    /// </summary>
+    /// <param name="metadata">The model metadata of the ContentArea property.</param>
+    /// <returns>A dictionary of attribute name → allowed option IDs, or <c>null</c> if no overrides apply.</returns>
+    public static Dictionary<string, string[]?>? GetPropertyOverrides(ModelMetadata? metadata) =>
+        metadata is { ContainerType: not null, PropertyName: not null }
+            ? GetPropertyOverrides(metadata.ContainerType, metadata.PropertyName)
+            : null;
 }

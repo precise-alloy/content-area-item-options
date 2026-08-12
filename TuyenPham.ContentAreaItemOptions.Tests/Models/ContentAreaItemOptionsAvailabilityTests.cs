@@ -1,34 +1,31 @@
 using TuyenPham.ContentAreaItemOptions.Models;
+using ItemOptions = TuyenPham.ContentAreaItemOptions.Models.ContentAreaItemOptions;
 
 namespace TuyenPham.ContentAreaItemOptions.Tests.Models;
 
 public class ContentAreaItemOptionsAvailabilityTests
 {
-    [Fact]
-    public void All_HasExpectedValue()
-    {
-        Assert.Equal(0, (int)ContentAreaItemOptionsAvailability.All);
-    }
-
-    [Fact]
-    public void Specific_HasExpectedValue()
-    {
-        Assert.Equal(1, (int)ContentAreaItemOptionsAvailability.Specific);
-    }
-
-    [Fact]
-    public void None_HasExpectedValue()
-    {
-        Assert.Equal(2, (int)ContentAreaItemOptionsAvailability.None);
-    }
-
     [Theory]
-    [InlineData("All", ContentAreaItemOptionsAvailability.All)]
-    [InlineData("Specific", ContentAreaItemOptionsAvailability.Specific)]
-    [InlineData("None", ContentAreaItemOptionsAvailability.None)]
-    public void ToString_ReturnsCorrectName(string expected, ContentAreaItemOptionsAvailability value)
+    [InlineData(ContentAreaItemOptionsAvailability.All, "All")]
+    [InlineData(ContentAreaItemOptionsAvailability.Specific, "Specific")]
+    [InlineData(ContentAreaItemOptionsAvailability.None, "None")]
+    public void ToString_ReturnsNameSentToTheClient(ContentAreaItemOptionsAvailability value, string expected)
     {
+        // The Dojo command compares against these exact strings.
         Assert.Equal(expected, value.ToString());
+    }
+
+    [Fact]
+    public void All_IsTheDefault()
+    {
+        var selector = new ItemOptions
+        {
+            AttributeName = "data-theme",
+            SelectorName = "theme",
+            LabelPrefix = "Theme",
+        };
+
+        Assert.Equal(ContentAreaItemOptionsAvailability.All, selector.Availability);
     }
 
     [Fact]

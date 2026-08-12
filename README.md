@@ -15,7 +15,7 @@ Editors can pick options from dropdown selectors on each content area block, and
 
 ## Installation
 
-Install from [Microsoft NuGet](https://www.nuget.org/packages/TuyenPham.ContentAreaItemOptions) or [Optimizely Nuget](https://nuget.optimizely.com/packages/tuyenpham.contentareaitemoptions):
+Install from [nuget.org](https://www.nuget.org/packages/TuyenPham.ContentAreaItemOptions) or the [Optimizely NuGet feed](https://nuget.optimizely.com/packages/tuyenpham.contentareaitemoptions):
 
 ```shell
 dotnet add package TuyenPham.ContentAreaItemOptions
@@ -38,7 +38,8 @@ dotnet build
 Run the tests:
 
 ```bash
-dotnet run --project TuyenPham.ContentAreaItemOptions.Tests
+dotnet run --project TuyenPham.ContentAreaItemOptions.Tests   # server-side
+bun test                                                      # client-side
 ```
 
 ## Setup
@@ -87,17 +88,32 @@ public static class ServiceCollectionExtensions
 }
 ```
 
-> **Important**: `AttributeName` values **must** start with `data-` to be persisted in `ContentAreaItem.RenderSettings` by the CMS.
+`AddContentAreaItemOptions` validates the registry at startup and throws an `ArgumentException` listing **every** problem it finds:
+
+- `AttributeName` must be non-empty and start with `data-` — the CMS only persists render settings with that prefix
+- `SelectorName` must be non-empty
+- `AttributeName` and `SelectorName` must each be unique across the registry (case-insensitive)
+- Option `Id` must be non-empty, and unique within its selector (case-insensitive)
 
 #### ContentAreaItemOptions Properties
 
-| Property        | Description                                                                                                                                                                                           |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AttributeName` | The render setting key (must start with `data-`). Used to store and retrieve the selected value.                                                                                                      |
-| `SelectorName`  | A unique identifier for the selector. Also used as the id when fetching a single selector from the REST store.                                                                                        |
-| `LabelPrefix`   | Label shown in the editor context menu (e.g. `"Theme"` → displays `"Theme: Blue"`).                                                                                                                   |
-| `DefaultLabel`  | Label when no option is selected. Default: `"Default"`.                                                                                                                                               |
-| `Availability`  | Controls default visibility. `All` (default): shown for all content types. `Specific`: only shown for content types or content area properties with an explicit `[ContentAreaItemOptions]` attribute. |
+| Property        | Description                                                                                                                                                       |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `AttributeName` | The render setting key (must start with `data-`). Used to store and retrieve the selected value.                                                                  |
+| `SelectorName`  | A unique identifier for the selector. Also used as the id when fetching a single selector from the REST store.                                                    |
+| `LabelPrefix`   | Label shown in the editor context menu (e.g. `"Theme"` → displays `"Theme: Blue"`).                                                                               |
+| `DefaultLabel`  | Label when no option is selected. Default: `"Default"`.                                                                                                          |
+| `Availability`  | Controls default visibility. See the table below.                                                                                                                |
+
+#### Availability Values
+
+| Value      | Effect                                                                                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `All`      | Default. Shown for all content types unless an attribute restricts or hides it.                                                 |
+| `Specific` | Hidden unless a content type or ContentArea property explicitly opts in with `[ContentAreaItemOptions]`.                        |
+| `None`     | Hidden everywhere. Attributes cannot opt back in, and values already stored in render settings are ignored during rendering.    |
+
+Use `None` to retire a selector without deleting its definition or its persisted data. Switching back to `All` or `Specific` restores the previously selected values.
 
 #### ContentAreaItemOption Properties
 
@@ -124,14 +140,13 @@ public void ConfigureServices(IServiceCollection services)
 
 ### 3. Apply Options During Rendering
 
-Override `ContentAreaRenderer` to read the selected values from render settings and apply them. The library's `GetApplicableCssClasses` method validates that each option is still applicable — checking content-type restrictions, ContentArea property overrides, and the global `Availability` setting. Stale render settings left behind after a selector was hidden or restricted are automatically ignored.
-
-When you use `[ContentAreaItemOptions]` or `[HideContentAreaItemOptions]` on a ContentArea **property**, override `Render` to capture the property-level overrides once, then pass them to `GetApplicableCssClasses` for each item:
+Override `ContentAreaRenderer` to read the selected values from render settings and apply them. `GetApplicableCssClasses` validates that each option is still applicable — checking content-type restrictions, ContentArea property overrides, and the `Availability` setting — so stale render settings left behind after a selector was hidden or restricted are ignored.
 
 ```csharp
-using EPiServer;
 using EPiServer.Core;
+using EPiServer.Web;
 using EPiServer.Web.Mvc.Html;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using TuyenPham.ContentAreaItemOptions.Infrastructure;
 using TuyenPham.ContentAreaItemOptions.Models;
 
@@ -139,36 +154,36 @@ public class CustomContentAreaRenderer : ContentAreaRenderer
 {
     private readonly ContentAreaItemOptionsRegistry _optionsRegistry;
     private readonly ContentAreaItemOptionsRestrictionResolver _restrictionResolver;
-    private readonly IContentLoader _contentLoader;
+    private readonly IContentAreaLoader _contentAreaLoader;
 
-    // Captured per Render() call — safe because the renderer is registered as Transient
+    // Per-render state; the renderer must be registered as Transient (see below).
     private Dictionary<string, string[]?>? _propertyOverrides;
 
     public CustomContentAreaRenderer(
         ContentAreaItemOptionsRegistry optionsRegistry,
         ContentAreaItemOptionsRestrictionResolver restrictionResolver,
-        IContentLoader contentLoader)
+        IContentAreaLoader contentAreaLoader)
     {
         _optionsRegistry = optionsRegistry;
         _restrictionResolver = restrictionResolver;
-        _contentLoader = contentLoader;
+        _contentAreaLoader = contentAreaLoader;
     }
 
     public override void Render(IHtmlHelper htmlHelper, ContentArea contentArea)
     {
-        // Extract property-level overrides from the ContentArea property attributes.
-        // This handles [ContentAreaItemOptions] / [HideContentAreaItemOptions] placed
-        // on the ContentArea property (e.g. on StartPage.MainContentArea).
-        var metadata = htmlHelper.ViewData.ModelMetadata;
-        _propertyOverrides = metadata.ContainerType is not null
-            && metadata.PropertyName is not null
-            ? ContentAreaItemOptionsMetadataExtender.GetPropertyOverrides(
-                metadata.ContainerType, metadata.PropertyName)
-            : null;
+        // Nested content areas re-enter Render, so the outer value has to be restored.
+        var previous = _propertyOverrides;
+        _propertyOverrides = ContentAreaItemOptionsMetadataExtender
+            .GetPropertyOverrides(htmlHelper.ViewData.ModelMetadata);
 
-        base.Render(htmlHelper, contentArea);
-
-        _propertyOverrides = null;
+        try
+        {
+            base.Render(htmlHelper, contentArea);
+        }
+        finally
+        {
+            _propertyOverrides = previous;
+        }
     }
 
     protected override void RenderContentAreaItem(
@@ -178,21 +193,21 @@ public class CustomContentAreaRenderer : ContentAreaRenderer
         string htmlTag,
         string cssClass)
     {
-        var renderSettings = contentAreaItem.RenderSettings
-            ?? new Dictionary<string, object>();
+        // LoadContent also resolves inline blocks, which have no ContentLink.
+        var contentTypeId = (_contentAreaLoader.LoadContent(contentAreaItem) as ContentData)?.ContentTypeID;
 
-        var contentTypeId = _contentLoader.TryGet<ContentData>(
-            contentAreaItem.ContentLink, out var content)
-            ? content.ContentTypeID
-            : (int?)null;
+        var optionClasses = _restrictionResolver.GetApplicableCssClasses(
+            _optionsRegistry,
+            contentAreaItem.RenderSettings,
+            contentTypeId,
+            _propertyOverrides);
 
-        var customClasses = _restrictionResolver.GetApplicableCssClasses(
-            _optionsRegistry, renderSettings, contentTypeId, _propertyOverrides);
-
-        // Pass classes to your view via ViewBag, htmlTag, or however you render blocks
-        htmlHelper.ViewBag.CustomCssClasses = customClasses;
-
-        base.RenderContentAreaItem(htmlHelper, contentAreaItem, templateTag, htmlTag, cssClass);
+        base.RenderContentAreaItem(
+            htmlHelper,
+            contentAreaItem,
+            templateTag,
+            htmlTag,
+            string.Join(" ", new[] { cssClass, optionClasses }.Where(c => !string.IsNullOrWhiteSpace(c))));
     }
 }
 ```
@@ -203,13 +218,19 @@ Register the custom renderer in `ConfigureServices`:
 services.AddTransient<ContentAreaRenderer, CustomContentAreaRenderer>();
 ```
 
+> **Register it as `Transient`.** The CMS default is `TryAddSingleton<ContentAreaRenderer>()`. `_propertyOverrides` is mutable instance state, so a singleton registration would leak overrides across concurrent requests. If you prefer a singleton renderer, pass the overrides through `htmlHelper.ViewData` instead of a field.
+
+`_propertyOverrides` is only needed when you use `[ContentAreaItemOptions]` or `[HideContentAreaItemOptions]` on a ContentArea **property**. If you only use them on block classes, you can pass `null` and drop the `Render` override.
+
+If you would rather apply the classes inside your block views, assign `optionClasses` to `htmlHelper.ViewData` or `ViewBag` instead of appending to `cssClass`.
+
 ## Controlling Options with `[ContentAreaItemOptions]` and `[HideContentAreaItemOptions]`
 
 The `[ContentAreaItemOptions]` attribute can be applied to **block classes** (to enable or restrict options per block type) or to **ContentArea properties** (to enable selectors for all items in that content area).
 
 To **hide** a selector, use the separate `[HideContentAreaItemOptions]` attribute.
 
-The behavior depends on the selector's `Availability` setting:
+The behavior depends on the selector's `Availability` setting.
 
 ### `Availability = All` (default)
 
@@ -279,7 +300,23 @@ public class PromoBlock : BlockData { /* ... */ }
 | `[HideContentAreaItemOptions("data-custom-layout")]`     | The layout selector is hidden for this block type |
 | No attribute                                             | The layout selector is hidden (Specific mode)     |
 
-The attributes can be applied multiple times on the same class, once per selector.
+The attributes can be applied multiple times on the same class, once per selector, and are inherited by derived block types.
+
+### `Availability = None`
+
+The selector is hidden for every block type and every content area, and attributes are ignored:
+
+```csharp
+new ContentAreaItemOptions
+{
+    AttributeName = "data-custom-layout",
+    SelectorName = "layout",
+    LabelPrefix = "Layout",
+    Availability = ContentAreaItemOptionsAvailability.None,
+}
+```
+
+Values already stored in render settings stay in the database but are never returned by `GetApplicableCssClasses`.
 
 ### Enabling Options on a ContentArea Property
 
@@ -316,46 +353,74 @@ public class StartPage : PageData
 | `[HideContentAreaItemOptions("data-custom-layout")]`     | The layout selector is hidden for items in this area  |
 | No attribute                                             | Falls back to block-type rules / Availability setting |
 
-> **Precedence**: Block-class attributes take priority over ContentArea property attributes, which in turn take priority over the global `Availability` setting. The full precedence chain is:
->
-> 1. **Content-type (block class)** — `[ContentAreaItemOptions]` / `[HideContentAreaItemOptions]` on the block type
-> 2. **ContentArea property** — Same attributes on the `ContentArea` property
-> 3. **Global** — The selector's `Availability` setting (`All` or `Specific`)
->
-> If a block type has its own `[ContentAreaItemOptions]` or `[HideContentAreaItemOptions]` for a selector, that restriction applies even if the ContentArea property enables all options. This precedence is enforced both in the editor UI and during rendering via `GetApplicableCssClasses` / `IsOptionApplicable`.
+> **Property-level attributes only affect rendering if you wire them up.** The editor UI picks them up automatically, but `GetApplicableCssClasses` needs `_propertyOverrides` passed in as shown in [Apply Options During Rendering](#3-apply-options-during-rendering). Without that, a selector hidden on a ContentArea property disappears from the editor while stale values keep rendering.
+
+### Precedence
+
+1. **`Availability = None`** — hidden unconditionally, nothing can override it
+2. **Content type (block class)** — `[ContentAreaItemOptions]` / `[HideContentAreaItemOptions]` on the block type
+3. **ContentArea property** — the same attributes on the `ContentArea` property
+4. **Global** — the selector's `Availability` setting (`All` or `Specific`)
+
+If a block type has its own attribute for a selector, that restriction applies even if the ContentArea property enables all options. The same chain is enforced in the editor UI (`content-area-item-command.js`) and during rendering (`GetApplicableCssClasses` / `IsOptionApplicable`), and both implementations are covered by the test suites.
+
+When the content type of an item cannot be resolved (for example an inline block loaded without `IContentAreaLoader`), step 2 is skipped; steps 1, 3 and 4 still apply.
 
 ## REST Store Endpoint
 
-The package exposes an authorized REST store endpoint via Optimizely's `[RestStore]` convention:
+The package exposes an authorized REST store endpoint via Optimizely's `[RestStore]` convention. The route is protected by the CMS shell module authorization and requires an antiforgery token, which the Dojo client sends automatically:
 
 - `GET /EPiServer/TuyenPham.ContentAreaItemOptions/Stores/content-area-options/` — Returns all selectors with their options and per-content-type restrictions
-- `GET /EPiServer/TuyenPham.ContentAreaItemOptions/Stores/content-area-options/{selectorName}` — Returns a single selector
+- `GET /EPiServer/TuyenPham.ContentAreaItemOptions/Stores/content-area-options/{selectorName}` — Returns a single selector, in the same shape as one list entry
 
 The client-side initializer uses the `epi.storeregistry` to call this endpoint automatically — you don't need to interact with it directly. It's mentioned here for debugging purposes.
 
 ## How It Works
 
-1. At startup, `AddContentAreaItemOptions()` registers the module in `ProtectedModuleOptions` so the CMS discovers its client-side resources and REST store
-2. When an editor opens the CMS UI, the Dojo initializer registers a `content-area-options` store via `epi.storeregistry` and fetches all selectors from the REST store endpoint
+1. At startup, `AddContentAreaItemOptions()` validates the registry and registers the module in `ProtectedModuleOptions` so the CMS discovers its client-side resources and REST store
+2. When an editor opens the CMS UI, the Dojo initializer registers a store via `epi.storeregistry` and fetches all selectors from the REST store endpoint once per session
 3. For each selector, a command is added to `ContentAreaEditor`'s context menu
 4. When the editor selects an option, the value is saved in the content area item's render settings under the `AttributeName` key
 5. During rendering, your `ContentAreaRenderer` reads the value and applies it (e.g. as a CSS class)
 
 ## Testing
 
-The `TuyenPham.ContentAreaItemOptions.Tests` project contains comprehensive tests built with [xUnit.net v3](https://xunit.net/). Coverage includes:
+Server-side tests use [xUnit.net v3](https://xunit.net/); client-side tests run on [Bun](https://bun.sh/) against the shipped Dojo modules through a minimal AMD shim.
 
 - **Models** — `ContentAreaItemOption`, `ContentAreaItemOptions`, `ContentAreaItemOptionsRegistry`, attributes, and the `Availability` enum
-- **Infrastructure** — `ContentAreaItemOptionsRestrictionResolver`, `ContentAreaOptionsStore`, and `ContentAreaItemOptionsMetadataExtender`
-- **DI registration** — `AddContentAreaItemOptions()` service registration, `data-` prefix validation, and `ProtectedModuleOptions` module registration
-
-Run the tests:
+- **Infrastructure** — `ContentAreaItemOptionsRestrictionResolver` (full precedence matrix including `None` and unresolved content types), `ContentAreaOptionsStore` (serialized JSON payload), and `ContentAreaItemOptionsMetadataExtender`
+- **DI registration** — service registration, `ProtectedModuleOptions`, and every registry validation rule
+- **Client** — `content-area-item-command.js` precedence, availability and labelling, mirroring the server-side matrix
 
 ```bash
 dotnet run --project TuyenPham.ContentAreaItemOptions.Tests
+bun test
 ```
 
 ## Change logs
+
+### v4.0.0
+
+Breaking changes:
+
+- `GetApplicableCssClasses` now takes `IDictionary<string, string>` to match `ContentAreaItem.RenderSettings` in CMS 13. Pass `contentAreaItem.RenderSettings` directly; the CMS 12 `IDictionary<string, object>` shape is gone.
+- `IsOptionApplicable` now takes `int? contentTypeId`. A `null` content type no longer disables all checks — property overrides and `Availability` are still enforced.
+- `AddContentAreaItemOptions` rejects duplicate `AttributeName`/`SelectorName`/option `Id` values and empty names, in addition to the existing `data-` prefix check.
+
+Fixes:
+
+- `Availability = None` is now honoured by both the editor UI and rendering. It previously behaved like `All`.
+- Selecting a block no longer writes `null` render settings for every selector, and the popup menu is rebuilt once per selection instead of twice.
+- The command label now updates from an explicit callback instead of a `dojo/Stateful` watch that could never fire.
+- Removed the unreachable `apiUrl` fallback, which could not satisfy the store's antiforgery requirement.
+- The client store is registered under a namespaced key so it cannot collide with other modules, and a failed fetch degrades to "no selectors" instead of hanging.
+- `dotnet pack` no longer requires PowerShell, so it works on a clean Linux or macOS machine.
+- CI publishes to NuGet only on pushes to `release`, never from pull requests.
+
+Additions:
+
+- `ContentAreaItemOptionsMetadataExtender.GetPropertyOverrides(ModelMetadata)` for use in `ContentAreaRenderer.Render`.
+- The single-selector REST response now returns the same shape as a list entry.
 
 ### v3.0.0
 
@@ -365,12 +430,12 @@ dotnet run --project TuyenPham.ContentAreaItemOptions.Tests
 
 From version 3.0.0:
 
-- Optimizely CMS 13 (EPiServer.CMS.Core 13.0.0+)
+- Optimizely CMS 13 (`EPiServer.CMS.UI.Core` 13.1.1+)
 - .NET 10.0+
 
 For older versions:
 
-- Optimizely CMS 12 (EPiServer.CMS.Core 12.23.1+)
+- Optimizely CMS 12 (`EPiServer.CMS.UI.Core` 12.23.1+)
 - .NET 8.0+
 
 ## License

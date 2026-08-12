@@ -7,19 +7,18 @@ on:
     branches: [release]
 
 permissions:
-  id-token: write # Required for OIDC
   contents: read
 
 jobs:
   test:
-    name: Run Tests
+    name: Build & Test
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.x.x
 
@@ -32,6 +31,48 @@ jobs:
       - name: Test
         run: dotnet run --project TuyenPham.ContentAreaItemOptions.Tests --no-build
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Test client scripts
+        run: bun test
+
+      - name: Pack the package
+        run: dotnet pack --configuration Release --output ./artifacts
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: ./artifacts/*.nupkg
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish to NuGet
+    needs: test
+    # Never publish from a pull request; OIDC and secrets must only be reachable
+    # from code that has already landed on release.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write # Required for OIDC
+      contents: read
+
+    steps:
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.x.x
+
+      # Push the exact package that was built and tested, rather than repacking.
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nupkg
+          path: ./artifacts
+
       # Get a short-lived NuGet API key
       - name: NuGet login (OIDC → temp API key)
         uses: NuGet/login@v1
@@ -39,9 +80,10 @@ jobs:
         with:
           user: ${{ secrets.NUGET_USER }}
 
-      - name: Pack the package
-        run: dotnet pack --configuration Release --output ./artifacts
-
-      # Push the package
+      # --skip-duplicate keeps re-runs green when the version is unchanged.
       - name: NuGet push
-        run: dotnet nuget push ./artifacts/*.nupkg --api-key ${{steps.login.outputs.NUGET_API_KEY}} --source https://api.nuget.org/v3/index.json
+        run: >
+          dotnet nuget push ./artifacts/*.nupkg
+          --api-key ${{ steps.login.outputs.NUGET_API_KEY }}
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate

@@ -4,213 +4,224 @@ using Microsoft.Extensions.Options;
 using TuyenPham.ContentAreaItemOptions.DependencyInjection;
 using TuyenPham.ContentAreaItemOptions.Infrastructure;
 using TuyenPham.ContentAreaItemOptions.Models;
+using ItemOptions = TuyenPham.ContentAreaItemOptions.Models.ContentAreaItemOptions;
 
 namespace TuyenPham.ContentAreaItemOptions.Tests.DependencyInjection;
 
 public class ServiceCollectionExtensionsTests
 {
-    private static ContentAreaItemOptionsRegistry CreateValidRegistry()
+    private static ItemOptions CreateSelector(
+        string attributeName = "data-theme",
+        string selectorName = "theme",
+        params string[] optionIds)
     {
-        return new ContentAreaItemOptionsRegistry
+        var selector = new ItemOptions
         {
-            new ContentAreaItemOptions.Models.ContentAreaItemOptions
-            {
-                AttributeName = "data-theme",
-                SelectorName = "theme",
-                LabelPrefix = "Theme",
-            }
-            .Add(new ContentAreaItemOption { Id = "black", Name = "Black" })
+            AttributeName = attributeName,
+            SelectorName = selectorName,
+            LabelPrefix = "Theme",
         };
+
+        foreach (var id in optionIds)
+        {
+            selector.Add(new ContentAreaItemOption { Id = id, Name = id });
+        }
+
+        return selector;
+    }
+
+    private static ArgumentException AssertRejects(ContentAreaItemOptionsRegistry registry) =>
+        Assert.Throws<ArgumentException>(() => new ServiceCollection().AddContentAreaItemOptions(registry));
+
+    // --- Registration ---
+
+    [Fact]
+    public void AddContentAreaItemOptions_RegistersRegistryInstance()
+    {
+        var registry = new ContentAreaItemOptionsRegistry { CreateSelector() };
+
+        var provider = new ServiceCollection()
+            .AddContentAreaItemOptions(registry)
+            .BuildServiceProvider();
+
+        Assert.Same(registry, provider.GetRequiredService<ContentAreaItemOptionsRegistry>());
     }
 
     [Fact]
-    public void AddContentAreaItemOptions_RegistersRegistry_AsSingleton()
+    public void AddContentAreaItemOptions_RegistersRestrictionResolverAsSingleton()
     {
-        var services = new ServiceCollection();
-        var registry = CreateValidRegistry();
+        var services = new ServiceCollection()
+            .AddContentAreaItemOptions(new ContentAreaItemOptionsRegistry { CreateSelector() });
 
-        services.AddContentAreaItemOptions(registry);
-
-        var descriptor = services.FirstOrDefault(
-            d => d.ServiceType == typeof(ContentAreaItemOptionsRegistry));
-        Assert.NotNull(descriptor);
-        Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
-    }
-
-    [Fact]
-    public void AddContentAreaItemOptions_RegistersSameRegistryInstance()
-    {
-        var services = new ServiceCollection();
-        var registry = CreateValidRegistry();
-
-        services.AddContentAreaItemOptions(registry);
-
-        var sp = services.BuildServiceProvider();
-        var resolved = sp.GetService<ContentAreaItemOptionsRegistry>();
-        Assert.Same(registry, resolved);
-    }
-
-    [Fact]
-    public void AddContentAreaItemOptions_RegistersRestrictionResolver_AsSingleton()
-    {
-        var services = new ServiceCollection();
-        var registry = CreateValidRegistry();
-
-        services.AddContentAreaItemOptions(registry);
-
-        var descriptor = services.FirstOrDefault(
+        var descriptor = Assert.Single(
+            services,
             d => d.ServiceType == typeof(ContentAreaItemOptionsRestrictionResolver));
-        Assert.NotNull(descriptor);
+
         Assert.Equal(ServiceLifetime.Singleton, descriptor.Lifetime);
     }
 
     [Fact]
-    public void AddContentAreaItemOptions_RegistersModuleInProtectedModuleOptions()
+    public void AddContentAreaItemOptions_RegistersProtectedModule()
     {
-        var services = new ServiceCollection();
-        var registry = CreateValidRegistry();
+        var provider = new ServiceCollection()
+            .AddContentAreaItemOptions(new ContentAreaItemOptionsRegistry { CreateSelector() })
+            .BuildServiceProvider();
 
-        services.AddContentAreaItemOptions(registry);
+        var options = provider.GetRequiredService<IOptions<ProtectedModuleOptions>>().Value;
 
-        var sp = services.BuildServiceProvider();
-        var options = sp.GetRequiredService<IOptions<ProtectedModuleOptions>>().Value;
-        Assert.Contains(options.Items,
-            item => item.Name == "TuyenPham.ContentAreaItemOptions");
+        Assert.Contains(options.Items, i => i.Name == "TuyenPham.ContentAreaItemOptions");
     }
 
     [Fact]
-    public void AddContentAreaItemOptions_DoesNotDuplicateModule_OnMultipleCalls()
+    public void AddContentAreaItemOptions_DoesNotRegisterModuleTwice()
     {
-        var services = new ServiceCollection();
-        var registry = CreateValidRegistry();
+        var provider = new ServiceCollection()
+            .AddContentAreaItemOptions(new ContentAreaItemOptionsRegistry { CreateSelector() })
+            .AddContentAreaItemOptions(new ContentAreaItemOptionsRegistry { CreateSelector() })
+            .BuildServiceProvider();
 
-        services.AddContentAreaItemOptions(registry);
-        services.AddContentAreaItemOptions(registry);
+        var options = provider.GetRequiredService<IOptions<ProtectedModuleOptions>>().Value;
 
-        var sp = services.BuildServiceProvider();
-        var options = sp.GetRequiredService<IOptions<ProtectedModuleOptions>>().Value;
-
-        var count = options.Items.Count(i =>
-            i.Name.Equals("TuyenPham.ContentAreaItemOptions", StringComparison.OrdinalIgnoreCase));
-        Assert.Equal(1, count);
-    }
-
-    [Fact]
-    public void AddContentAreaItemOptions_Throws_WhenAttributeNameLacksDataPrefix()
-    {
-        var services = new ServiceCollection();
-        var registry = new ContentAreaItemOptionsRegistry
-        {
-            new ContentAreaItemOptions.Models.ContentAreaItemOptions
-            {
-                AttributeName = "invalid-name",
-                SelectorName = "test",
-                LabelPrefix = "Test",
-            }
-        };
-
-        var ex = Assert.Throws<ArgumentException>(
-            () => services.AddContentAreaItemOptions(registry));
-
-        Assert.Contains("data-", ex.Message);
-        Assert.Contains("invalid-name", ex.Message);
-    }
-
-    [Fact]
-    public void AddContentAreaItemOptions_Throws_ListingAllInvalidNames()
-    {
-        var services = new ServiceCollection();
-        var registry = new ContentAreaItemOptionsRegistry
-        {
-            new ContentAreaItemOptions.Models.ContentAreaItemOptions
-            {
-                AttributeName = "bad-one",
-                SelectorName = "one",
-                LabelPrefix = "One",
-            },
-            new ContentAreaItemOptions.Models.ContentAreaItemOptions
-            {
-                AttributeName = "data-good",
-                SelectorName = "good",
-                LabelPrefix = "Good",
-            },
-            new ContentAreaItemOptions.Models.ContentAreaItemOptions
-            {
-                AttributeName = "bad-two",
-                SelectorName = "two",
-                LabelPrefix = "Two",
-            }
-        };
-
-        var ex = Assert.Throws<ArgumentException>(
-            () => services.AddContentAreaItemOptions(registry));
-
-        Assert.Contains("bad-one", ex.Message);
-        Assert.Contains("bad-two", ex.Message);
-        Assert.DoesNotContain("data-good", ex.Message);
-    }
-
-    [Fact]
-    public void AddContentAreaItemOptions_AcceptsDataPrefix_CaseInsensitive()
-    {
-        var services = new ServiceCollection();
-        var registry = new ContentAreaItemOptionsRegistry
-        {
-            new ContentAreaItemOptions.Models.ContentAreaItemOptions
-            {
-                AttributeName = "DATA-Theme",
-                SelectorName = "theme",
-                LabelPrefix = "Theme",
-            }
-        };
-
-        // Should not throw
-        services.AddContentAreaItemOptions(registry);
+        Assert.Single(options.Items, i => i.Name == "TuyenPham.ContentAreaItemOptions");
     }
 
     [Fact]
     public void AddContentAreaItemOptions_ReturnsServiceCollection_ForChaining()
     {
         var services = new ServiceCollection();
-        var registry = CreateValidRegistry();
 
-        var result = services.AddContentAreaItemOptions(registry);
-
-        Assert.Same(services, result);
+        Assert.Same(services, services.AddContentAreaItemOptions(new ContentAreaItemOptionsRegistry()));
     }
 
     [Fact]
-    public void AddContentAreaItemOptions_ValidRegistryWithMultipleSelectors_Succeeds()
+    public void AddContentAreaItemOptions_AcceptsEmptyRegistry()
     {
-        var services = new ServiceCollection();
+        var provider = new ServiceCollection()
+            .AddContentAreaItemOptions(new ContentAreaItemOptionsRegistry())
+            .BuildServiceProvider();
+
+        Assert.Empty(provider.GetRequiredService<ContentAreaItemOptionsRegistry>());
+    }
+
+    [Fact]
+    public void AddContentAreaItemOptions_ThrowsArgumentNullException_WhenRegistryIsNull()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            new ServiceCollection().AddContentAreaItemOptions(null!));
+    }
+
+    // --- AttributeName validation ---
+
+    [Theory]
+    [InlineData("data-theme")]
+    [InlineData("DATA-THEME")]
+    [InlineData("data-")]
+    public void AddContentAreaItemOptions_AcceptsDataPrefixedAttributeNames(string attributeName)
+    {
+        var registry = new ContentAreaItemOptionsRegistry { CreateSelector(attributeName) };
+
+        new ServiceCollection().AddContentAreaItemOptions(registry);
+    }
+
+    [Theory]
+    [InlineData("theme")]
+    [InlineData("custom-theme")]
+    [InlineData("dat-theme")]
+    public void AddContentAreaItemOptions_RejectsAttributeNamesWithoutDataPrefix(string attributeName)
+    {
+        var registry = new ContentAreaItemOptionsRegistry { CreateSelector(attributeName) };
+
+        Assert.Contains("must start with 'data-'", AssertRejects(registry).Message);
+    }
+
+    [Fact]
+    public void AddContentAreaItemOptions_RejectsEmptyAttributeName()
+    {
+        var registry = new ContentAreaItemOptionsRegistry { CreateSelector(attributeName: "  ") };
+
+        Assert.Contains("empty AttributeName", AssertRejects(registry).Message);
+    }
+
+    [Fact]
+    public void AddContentAreaItemOptions_ReportsEveryInvalidAttributeNameAtOnce()
+    {
         var registry = new ContentAreaItemOptionsRegistry
         {
-            new ContentAreaItemOptions.Models.ContentAreaItemOptions
-            {
-                AttributeName = "data-theme",
-                SelectorName = "theme",
-                LabelPrefix = "Theme",
-            },
-            new ContentAreaItemOptions.Models.ContentAreaItemOptions
-            {
-                AttributeName = "data-margin",
-                SelectorName = "margin",
-                LabelPrefix = "Margin",
-            },
-            new ContentAreaItemOptions.Models.ContentAreaItemOptions
-            {
-                AttributeName = "data-padding",
-                SelectorName = "padding",
-                LabelPrefix = "Padding",
-            }
+            CreateSelector("theme", "theme"),
+            CreateSelector("margin", "margin"),
         };
 
-        // Should not throw
-        services.AddContentAreaItemOptions(registry);
+        var message = AssertRejects(registry).Message;
 
-        var sp = services.BuildServiceProvider();
-        var resolved = sp.GetService<ContentAreaItemOptionsRegistry>();
-        Assert.NotNull(resolved);
-        Assert.Equal(3, resolved.Count());
+        Assert.Contains("'theme'", message);
+        Assert.Contains("'margin'", message);
+    }
+
+    // --- Uniqueness validation ---
+
+    [Fact]
+    public void AddContentAreaItemOptions_RejectsDuplicateAttributeNames()
+    {
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            CreateSelector("data-theme", "theme"),
+            CreateSelector("DATA-THEME", "colour"),
+        };
+
+        Assert.Contains("Duplicate AttributeName", AssertRejects(registry).Message);
+    }
+
+    [Fact]
+    public void AddContentAreaItemOptions_RejectsDuplicateSelectorNames()
+    {
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            CreateSelector("data-theme", "theme"),
+            CreateSelector("data-colour", "Theme"),
+        };
+
+        Assert.Contains("Duplicate SelectorName", AssertRejects(registry).Message);
+    }
+
+    [Fact]
+    public void AddContentAreaItemOptions_RejectsEmptySelectorName()
+    {
+        var registry = new ContentAreaItemOptionsRegistry { CreateSelector(selectorName: "") };
+
+        Assert.Contains("empty SelectorName", AssertRejects(registry).Message);
+    }
+
+    // --- Option validation ---
+
+    [Fact]
+    public void AddContentAreaItemOptions_RejectsDuplicateOptionIds()
+    {
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            CreateSelector("data-theme", "theme", "black", "BLACK"),
+        };
+
+        Assert.Contains("duplicate option Id 'black'", AssertRejects(registry).Message);
+    }
+
+    [Fact]
+    public void AddContentAreaItemOptions_RejectsEmptyOptionId()
+    {
+        var selector = CreateSelector();
+        selector.Add(new ContentAreaItemOption { Id = null, Name = "Nameless" });
+
+        Assert.Contains("empty Id", AssertRejects([selector]).Message);
+    }
+
+    [Fact]
+    public void AddContentAreaItemOptions_AcceptsSameOptionIdAcrossDifferentSelectors()
+    {
+        var registry = new ContentAreaItemOptionsRegistry
+        {
+            CreateSelector("data-theme", "theme", "none"),
+            CreateSelector("data-margin", "margin", "none"),
+        };
+
+        new ServiceCollection().AddContentAreaItemOptions(registry);
     }
 }

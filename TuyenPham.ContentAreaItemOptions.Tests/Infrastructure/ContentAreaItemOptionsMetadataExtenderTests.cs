@@ -1,4 +1,5 @@
 using EPiServer.Core;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using TuyenPham.ContentAreaItemOptions.Infrastructure;
 using TuyenPham.ContentAreaItemOptions.Models;
 
@@ -19,6 +20,8 @@ public class ContentAreaItemOptionsMetadataExtenderTests
 
         public virtual ContentArea? PlainContentArea { get; set; }
     }
+
+    private class DerivedPage : PageWithDecoratedContentArea { }
 
     [Fact]
     public void BuildOverrides_ReturnsNull_WhenEmptyAttributes()
@@ -236,4 +239,65 @@ public class ContentAreaItemOptionsMetadataExtenderTests
 
         Assert.Null(result);
     }
+
+    [Fact]
+    public void GetPropertyOverrides_ThrowsArgumentNullException_ForNullOwnerType()
+    {
+        Assert.Throws<ArgumentNullException>(() =>
+            ContentAreaItemOptionsMetadataExtender.GetPropertyOverrides(null!, "MainContentArea"));
+    }
+
+    [Fact]
+    public void GetPropertyOverrides_InheritsAttributesFromBaseType()
+    {
+        var result = ContentAreaItemOptionsMetadataExtender.GetPropertyOverrides(
+            typeof(DerivedPage), nameof(PageWithDecoratedContentArea.MainContentArea));
+
+        Assert.NotNull(result);
+        Assert.Equal(["1-12", "3-12"], result["data-columns"]!);
+    }
+
+    // --- GetPropertyOverrides(ModelMetadata) tests ---
+
+    [Fact]
+    public void GetPropertyOverrides_FromMetadata_ReturnsOverrides()
+    {
+        var metadata = CreateMetadata(
+            typeof(PageWithDecoratedContentArea),
+            nameof(PageWithDecoratedContentArea.MainContentArea));
+
+        var result = ContentAreaItemOptionsMetadataExtender.GetPropertyOverrides(metadata);
+
+        Assert.NotNull(result);
+        Assert.Equal(["1-12", "3-12"], result["data-columns"]!);
+    }
+
+    [Fact]
+    public void GetPropertyOverrides_FromMetadata_ReturnsNull_ForUndecoratedProperty()
+    {
+        var metadata = CreateMetadata(
+            typeof(PageWithDecoratedContentArea),
+            nameof(PageWithDecoratedContentArea.PlainContentArea));
+
+        Assert.Null(ContentAreaItemOptionsMetadataExtender.GetPropertyOverrides(metadata));
+    }
+
+    [Fact]
+    public void GetPropertyOverrides_FromMetadata_ReturnsNull_ForNullMetadata()
+    {
+        Assert.Null(ContentAreaItemOptionsMetadataExtender.GetPropertyOverrides((ModelMetadata?)null));
+    }
+
+    [Fact]
+    public void GetPropertyOverrides_FromMetadata_ReturnsNull_WhenMetadataIsNotAProperty()
+    {
+        // A ContentArea rendered outside a property has type-level metadata only.
+        var metadata = new EmptyModelMetadataProvider()
+            .GetMetadataForType(typeof(ContentArea));
+
+        Assert.Null(ContentAreaItemOptionsMetadataExtender.GetPropertyOverrides(metadata));
+    }
+
+    private static ModelMetadata CreateMetadata(Type containerType, string propertyName) =>
+        new EmptyModelMetadataProvider().GetMetadataForProperty(containerType, propertyName);
 }
