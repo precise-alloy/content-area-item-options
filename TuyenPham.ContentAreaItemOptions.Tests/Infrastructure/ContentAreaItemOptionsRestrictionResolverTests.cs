@@ -417,6 +417,19 @@ public class ContentAreaItemOptionsRestrictionResolverTests
     }
 
     [Fact]
+    public void IsOptionApplicable_MatchesPropertyOverrideAttributeName_CaseInsensitively()
+    {
+        var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));
+        var resolver = new ContentAreaItemOptionsRestrictionResolver(repo);
+        var propertyOverrides = ContentAreaItemOptionsMetadataExtender.BuildOverrides(
+        [
+            new HideContentAreaItemOptionsAttribute("DATA-THEME"),
+        ]);
+
+        Assert.False(resolver.IsOptionApplicable(CreateSelector("data-theme"), "black", 1, propertyOverrides));
+    }
+
+    [Fact]
     public void IsOptionApplicable_ReturnsTrue_WhenPropertyOverrideHasEmptyAllowedList()
     {
         var repo = CreateRepository((1, typeof(BlockWithNoAttributes)));

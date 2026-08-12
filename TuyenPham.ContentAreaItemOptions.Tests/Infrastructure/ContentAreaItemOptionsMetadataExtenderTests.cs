@@ -110,6 +110,57 @@ public class ContentAreaItemOptionsMetadataExtenderTests
     }
 
     [Fact]
+    public void BuildOverrides_CombinesDuplicateSelectorDeclarations()
+    {
+        var attributes = new Attribute[]
+        {
+            new ContentAreaItemOptionsAttribute("data-theme", "black", "white"),
+            new ContentAreaItemOptionsAttribute("DATA-THEME", "white", "blue"),
+        };
+
+        var result = ContentAreaItemOptionsMetadataExtender.BuildOverrides(attributes);
+
+        Assert.NotNull(result);
+        Assert.Single(result);
+        var allowedIds = result["data-theme"];
+        Assert.NotNull(allowedIds);
+        Assert.Equal(["black", "white", "blue"], allowedIds);
+    }
+
+    [Fact]
+    public void BuildOverrides_UnrestrictedDeclarationEnablesAllOptions()
+    {
+        var attributes = new Attribute[]
+        {
+            new ContentAreaItemOptionsAttribute("data-theme", "black"),
+            new ContentAreaItemOptionsAttribute("DATA-THEME"),
+        };
+
+        var result = ContentAreaItemOptionsMetadataExtender.BuildOverrides(attributes);
+
+        Assert.NotNull(result);
+        var allowedIds = result["data-theme"];
+        Assert.NotNull(allowedIds);
+        Assert.Empty(allowedIds);
+    }
+
+    [Fact]
+    public void BuildOverrides_HideWinsOverCaseInsensitiveEnableDeclarations()
+    {
+        var attributes = new Attribute[]
+        {
+            new ContentAreaItemOptionsAttribute("data-theme", "black"),
+            new HideContentAreaItemOptionsAttribute("DATA-THEME"),
+        };
+
+        var result = ContentAreaItemOptionsMetadataExtender.BuildOverrides(attributes);
+
+        Assert.NotNull(result);
+        Assert.Single(result);
+        Assert.Null(result["data-theme"]);
+    }
+
+    [Fact]
     public void BuildOverrides_HandlesMultipleSelectors()
     {
         var attributes = new Attribute[]

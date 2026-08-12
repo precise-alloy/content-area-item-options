@@ -125,6 +125,15 @@ describe('_getOptionsForModel precedence', () => {
     expect(command._getOptionsForModel()).toEqual([]);
   });
 
+  test('property override attribute names are case-insensitive', () => {
+    const command = createCommand({
+      model: createModel(),
+      contentAreaOverrides: { 'DATA-THEME': null },
+    });
+
+    expect(command._getOptionsForModel()).toEqual([]);
+  });
+
   test('property override for another selector is ignored', () => {
     const command = createCommand({
       availability: 'Specific',

@@ -302,6 +302,8 @@ public class PromoBlock : BlockData { /* ... */ }
 
 The attributes can be applied multiple times on the same class, once per selector, and are inherited by derived block types.
 
+Attribute names are matched case-insensitively. Repeating `[ContentAreaItemOptions]` for the same selector combines its option IDs; an occurrence without option IDs enables every option. `[HideContentAreaItemOptions]` always wins when it targets the same selector.
+
 ### `Availability = None`
 
 The selector is hidden for every block type and every content area, and attributes are ignored:

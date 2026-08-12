@@ -50,13 +50,21 @@ public sealed class ContentAreaItemOptionsMetadataExtender : EditorDescriptor
             return null;
         }
 
-        // Structure: { "data-custom-theme": ["dark", "light"], "data-margin": [] }
-        // Empty array means the selector is explicitly enabled with all options.
-        // null means the selector is hidden.
-        var overrides = opts.ToDictionary(
-            o => o.AttributeName,
-            o => (string[]?)o.AllowedOptionIds);
+        // Attribute names are case-insensitive everywhere else in the package.
+        var overrides = new Dictionary<string, string[]?>(StringComparer.OrdinalIgnoreCase);
 
+        foreach (var group in opts.GroupBy(o => o.AttributeName, StringComparer.OrdinalIgnoreCase))
+        {
+            // An unrestricted declaration enables all options; otherwise combine
+            // repeated declarations into one case-insensitive allowed set.
+            overrides[group.Key] = group.Any(o => o.AllowedOptionIds.Length == 0)
+                ? []
+                : group.SelectMany(o => o.AllowedOptionIds)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+        }
+
+        // A hide wins over every enable declaration for the same selector.
         foreach (var hide in hides)
         {
             overrides[hide.AttributeName] = null;

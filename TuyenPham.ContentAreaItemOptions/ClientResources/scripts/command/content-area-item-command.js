@@ -108,11 +108,31 @@ define([
         return this._filter(this.restrictions[contentTypeId]);
       }
 
-      if (this.contentAreaOverrides && this.contentAreaOverrides.hasOwnProperty(this.attributeName)) {
-        return this._filter(this.contentAreaOverrides[this.attributeName]);
+      var propertyOverride = this._getPropertyOverride();
+      if (propertyOverride.found) {
+        return this._filter(propertyOverride.allowedIds);
       }
 
       return this.availability === "Specific" ? [] : this.options;
+    },
+
+    _getPropertyOverride: function () {
+      if (!this.contentAreaOverrides) {
+        return { found: false };
+      }
+
+      // Dictionary comparers are not preserved in JSON, so match keys here.
+      var attributeName = this.attributeName.toLowerCase();
+      for (var key in this.contentAreaOverrides) {
+        if (
+          Object.prototype.hasOwnProperty.call(this.contentAreaOverrides, key) &&
+          key.toLowerCase() === attributeName
+        ) {
+          return { found: true, allowedIds: this.contentAreaOverrides[key] };
+        }
+      }
+
+      return { found: false };
     },
 
     _filter: function (/*Array|null*/ allowedIds) {
